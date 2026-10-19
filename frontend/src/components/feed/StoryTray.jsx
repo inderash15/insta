@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
-import api from '../../services/api';
+import api, { getMediaUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import StoryViewerModal from '../modals/StoryViewerModal';
@@ -84,11 +84,17 @@ export default function StoryTray({ onOpenCreateStory }) {
               }`}
             >
               <div className={`w-full h-full rounded-full flex items-center justify-center font-bold text-sm text-neutral-200 overflow-hidden ${hasMyStories ? 'bg-neutral-950 p-0.5' : 'bg-neutral-800'}`}>
-                <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden">
-                  {user?.avatarUrl ? (
-                    <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    user?.username?.charAt(0).toUpperCase() || 'U'
+                <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden relative">
+                  <span className="select-none font-bold text-sm text-neutral-200 uppercase">
+                    {user?.username?.charAt(0) || 'U'}
+                  </span>
+                  {user?.avatarUrl && (
+                    <img
+                      src={getMediaUrl(user.avatarUrl)}
+                      alt=""
+                      className="w-full h-full object-cover absolute inset-0"
+                      onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                    />
                   )}
                 </div>
               </div>
@@ -105,9 +111,16 @@ export default function StoryTray({ onOpenCreateStory }) {
                 <Plus className="w-3.5 h-3.5 stroke-[3]" />
               </div>
             </div>
-            <span className="text-[11px] text-neutral-300 font-medium truncate max-w-[70px]">
-              Your story
-            </span>
+            <div className="flex flex-col items-center">
+              <span className="text-[11px] text-neutral-300 font-medium truncate max-w-[76px] text-center" title={user?.username ? `@${user.username}` : ''}>
+                Your story
+              </span>
+              {user?.username && (
+                <span className="text-[9px] text-neutral-500 font-normal truncate max-w-[76px] leading-tight text-center">
+                  @{user.username}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Active Followed Stories (excluding current user) */}
@@ -131,11 +144,17 @@ export default function StoryTray({ onOpenCreateStory }) {
                   }`}
                 >
                   <div className="w-full h-full bg-neutral-950 rounded-full p-0.5">
-                    <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center font-bold text-sm text-neutral-200 overflow-hidden">
-                      {author?.avatarUrl ? (
-                        <img src={author.avatarUrl} alt="" className="w-full h-full object-cover" />
-                      ) : (
-                        author?.username?.charAt(0).toUpperCase() || 'U'
+                    <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden relative">
+                      <span className="select-none font-bold text-sm text-neutral-200 uppercase">
+                        {author?.username?.charAt(0) || 'U'}
+                      </span>
+                      {author?.avatarUrl && (
+                        <img
+                          src={getMediaUrl(author.avatarUrl)}
+                          alt=""
+                          className="w-full h-full object-cover absolute inset-0"
+                          onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                        />
                       )}
                     </div>
                   </div>

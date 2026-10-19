@@ -25,6 +25,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import CreateModal from '../modals/CreateModal';
 import CreateNoteModal from '../notes/CreateNoteModal';
+import { getMediaUrl } from '../../services/api';
 
 export default function AppShell() {
   const { user, logout } = useAuth();
@@ -159,9 +160,19 @@ export default function AppShell() {
                   }`}
                 >
                   <div className="relative shrink-0">
-                    {item.isProfile && user?.avatarUrl ? (
-                      <div className={`w-6 h-6 rounded-full overflow-hidden border ${isActive ? 'border-pink-500' : 'border-neutral-700'}`}>
-                        <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                    {item.isProfile && user ? (
+                      <div className={`w-6 h-6 rounded-full overflow-hidden border relative bg-neutral-800 flex items-center justify-center ${isActive ? 'border-pink-500' : 'border-neutral-700'}`}>
+                        <span className="text-[10px] font-bold text-neutral-200 uppercase select-none">
+                          {user.username?.charAt(0) || 'U'}
+                        </span>
+                        {user.avatarUrl && (
+                          <img 
+                            src={getMediaUrl(user.avatarUrl)} 
+                            alt="" 
+                            className="w-full h-full object-cover absolute inset-0"
+                            onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                          />
+                        )}
                       </div>
                     ) : (
                       <Icon className={`w-5 h-5 ${isActive ? 'stroke-[2.5]' : 'stroke-[1.8] group-hover:scale-110 transition'}`} />
@@ -378,9 +389,19 @@ export default function AppShell() {
           to={`/users/${user?.username || ''}`}
           className={`p-1.5 transition ${location.pathname.startsWith('/users') ? 'text-pink-500' : 'text-neutral-400'}`}
         >
-          {user?.avatarUrl ? (
-            <div className="w-5 h-5 rounded-full overflow-hidden border border-neutral-600">
-              <img src={user.avatarUrl} alt="" className="w-full h-full object-cover" />
+          {user ? (
+            <div className="w-5 h-5 rounded-full overflow-hidden border border-neutral-600 relative bg-neutral-800 flex items-center justify-center">
+              <span className="text-[9px] font-bold text-neutral-200 uppercase select-none">
+                {user.username?.charAt(0) || 'U'}
+              </span>
+              {user.avatarUrl && (
+                <img 
+                  src={getMediaUrl(user.avatarUrl)} 
+                  alt="" 
+                  className="w-full h-full object-cover absolute inset-0"
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                />
+              )}
             </div>
           ) : (
             <UserIcon className="w-5 h-5" />

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { X, ChevronLeft, ChevronRight, Eye, Send, Star, Volume2, VolumeX } from 'lucide-react';
-import api from '../../services/api';
+import api, { getMediaUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 
 export default function StoryViewerModal({ storyGroup, isOpen, onClose }) {
@@ -152,11 +152,17 @@ export default function StoryViewerModal({ storyGroup, isOpen, onClose }) {
                 ? 'bg-gradient-to-tr from-emerald-500 to-green-400' 
                 : 'insta-story-gradient'
             }`}>
-              <div className="w-full h-full bg-neutral-900 rounded-full flex items-center justify-center font-bold text-xs uppercase overflow-hidden">
-                {author?.avatarUrl ? (
-                  <img src={author.avatarUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  author?.username?.charAt(0) || 'U'
+              <div className="w-full h-full bg-neutral-900 rounded-full flex items-center justify-center font-bold text-xs uppercase overflow-hidden relative">
+                <span className="select-none font-bold text-xs text-neutral-200 uppercase">
+                  {author?.username?.charAt(0) || 'U'}
+                </span>
+                {author?.avatarUrl && (
+                  <img
+                    src={getMediaUrl(author.avatarUrl)}
+                    alt=""
+                    className="w-full h-full object-cover absolute inset-0"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
                 )}
               </div>
             </div>
@@ -209,7 +215,7 @@ export default function StoryViewerModal({ storyGroup, isOpen, onClose }) {
           {currentStory?.mediaType === 'video' || currentStory?.mediaUrl?.endsWith('.mp4') ? (
             <video 
               ref={videoRef}
-              src={currentStory.mediaUrl} 
+              src={getMediaUrl(currentStory.mediaUrl)} 
               autoPlay 
               muted={isMuted}
               playsInline 
@@ -217,7 +223,7 @@ export default function StoryViewerModal({ storyGroup, isOpen, onClose }) {
             />
           ) : (
             <img 
-              src={currentStory?.mediaUrl} 
+              src={getMediaUrl(currentStory?.mediaUrl)} 
               alt="Story" 
               className="w-full h-full object-cover" 
             />

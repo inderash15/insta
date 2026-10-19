@@ -17,7 +17,7 @@ import {
   Tag,
   Users
 } from 'lucide-react';
-import api from '../../services/api';
+import api, { getMediaUrl } from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import EditProfileModal from '../../components/modals/EditProfileModal';
@@ -287,11 +287,17 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
             title={storyGroup && storyGroup.stories?.length > 0 ? 'Click to view story' : isSelf ? 'Click to upload photo' : ''}
           >
             <div className="w-full h-full bg-neutral-950 rounded-full flex items-center justify-center font-bold text-4xl text-neutral-200 uppercase overflow-hidden p-0.5">
-              <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden">
-                {profile.avatarUrl ? (
-                  <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  profile.username?.charAt(0) || 'U'
+              <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden relative">
+                <span className="select-none font-bold text-4xl text-neutral-200 uppercase">
+                  {profile.username?.charAt(0) || 'U'}
+                </span>
+                {profile.avatarUrl && (
+                  <img
+                    src={getMediaUrl(profile.avatarUrl)}
+                    alt=""
+                    className="w-full h-full object-cover absolute inset-0"
+                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                  />
                 )}
               </div>
             </div>

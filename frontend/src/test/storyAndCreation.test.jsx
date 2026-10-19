@@ -27,7 +27,8 @@ vi.mock('../services/api', () => ({
   default: {
     get: vi.fn(),
     post: vi.fn()
-  }
+  },
+  getMediaUrl: (url) => url
 }));
 
 describe('StoryTray & Isolated Creation Entry Points Tests', () => {
