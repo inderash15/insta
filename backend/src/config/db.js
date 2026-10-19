@@ -12,19 +12,24 @@ export const connectDB = async () => {
     mongodInstance = await MongoMemoryServer.create();
     uri = mongodInstance.getUri();
   } else {
+    const isRemoteUri = uri.includes('mongodb+srv') || (!uri.includes('127.0.0.1') && !uri.includes('localhost'));
+    const isProd = env.NODE_ENV === 'production';
+    const timeoutMs = isRemoteUri || isProd ? 15000 : 3000;
+    const sanitizedUri = uri.replace(/\/\/[^:]+:[^@]+@/, '//***:***@');
+
     try {
-      console.log(`[DB] Attempting connection to MongoDB daemon at ${uri}...`);
-      await mongoose.connect(uri, { serverSelectionTimeoutMS: 2500 });
-      console.log(`[DB] Connected successfully to local MongoDB at ${uri}`);
+      console.log(`[DB] Attempting connection to MongoDB at ${sanitizedUri} (timeout: ${timeoutMs}ms)...`);
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: timeoutMs });
+      console.log(`[DB] Connected successfully to MongoDB at ${sanitizedUri}`);
       return;
     } catch (err) {
-      if (env.USE_IN_MEMORY_DB === 'auto') {
-        console.warn(`[DB] Local MongoDB not reachable at ${uri}.`);
+      if (env.USE_IN_MEMORY_DB === 'auto' && !isProd) {
+        console.warn(`[DB] MongoDB not reachable at ${sanitizedUri}.`);
         console.log('[DB] Launching embedded MongoDB (MongoMemoryServer) for local development...');
         mongodInstance = await MongoMemoryServer.create();
         uri = mongodInstance.getUri();
       } else {
-        console.error('[DB] Failed to connect to MongoDB and in-memory fallback is disabled.', err.message);
+        console.error('[DB] Failed to connect to MongoDB and in-memory fallback is disabled in production.', err.message);
         throw err;
       }
     }

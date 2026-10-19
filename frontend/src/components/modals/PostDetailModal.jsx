@@ -14,9 +14,11 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 
 export default function PostDetailModal({ postId, isOpen, onClose, onPostDeleted }) {
   const { user } = useAuth();
+  const { socket } = useSocket();
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
   const [newComment, setNewComment] = useState('');
@@ -24,6 +26,82 @@ export default function PostDetailModal({ postId, isOpen, onClose, onPostDeleted
   const [submittingComment, setSubmittingComment] = useState(false);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
+
+  useEffect(() => {
+    if (!socket || !postId || !isOpen) return;
+    const currentUserId = (user?._id || user?.id)?.toString();
+
+    const handlePostLiked = ({ postId: pId, likesCount, userId }) => {
+      if (pId === postId) {
+        setPost((curr) => curr ? {
+          ...curr,
+          likesCount,
+          ...(userId?.toString() === currentUserId ? { isLiked: true } : {})
+        } : null);
+      }
+    };
+
+    const handlePostUnliked = ({ postId: pId, likesCount, userId }) => {
+      if (pId === postId) {
+        setPost((curr) => curr ? {
+          ...curr,
+          likesCount,
+          ...(userId?.toString() === currentUserId ? { isLiked: false } : {})
+        } : null);
+      }
+    };
+
+    const handleCommentCreated = ({ postId: pId, comment, commentsCount }) => {
+      if (pId === postId && comment) {
+        setComments((prev) => {
+          if (prev.some((c) => c._id === comment._id)) return prev;
+          return [...prev, comment];
+        });
+        setPost((curr) => curr ? {
+          ...curr,
+          commentsCount: commentsCount !== undefined ? commentsCount : (curr.commentsCount || 0) + 1
+        } : null);
+      }
+    };
+
+    const handleCommentDeleted = ({ postId: pId, commentId, commentsCount }) => {
+      if (pId === postId) {
+        setComments((prev) => prev.filter((c) => c._id !== commentId));
+        setPost((curr) => curr ? {
+          ...curr,
+          commentsCount: commentsCount !== undefined ? commentsCount : Math.max(0, (curr.commentsCount || 1) - 1)
+        } : null);
+      }
+    };
+
+    const handlePostSaved = ({ postId: pId, userId }) => {
+      if (pId === postId && userId?.toString() === currentUserId) {
+        setPost((curr) => curr ? { ...curr, isBookmarked: true } : null);
+      }
+    };
+
+    const handlePostUnsaved = ({ postId: pId, userId }) => {
+      if (pId === postId && userId?.toString() === currentUserId) {
+        setPost((curr) => curr ? { ...curr, isBookmarked: false } : null);
+      }
+    };
+
+    socket.on('post:liked', handlePostLiked);
+    socket.on('post:unliked', handlePostUnliked);
+    socket.on('comment:created', handleCommentCreated);
+    socket.on('comment:deleted', handleCommentDeleted);
+    socket.on('post:saved', handlePostSaved);
+    socket.on('post:unsaved', handlePostUnsaved);
+
+    return () => {
+      socket.off('post:liked', handlePostLiked);
+      socket.off('post:unliked', handlePostUnliked);
+      socket.off('comment:created', handleCommentCreated);
+      socket.off('comment:deleted', handleCommentDeleted);
+      socket.off('post:saved', handlePostSaved);
+      socket.off('post:unsaved', handlePostUnsaved);
+    };
+  }, [socket, postId, isOpen, user]);
 
   useEffect(() => {
     if (!postId || !isOpen) return;

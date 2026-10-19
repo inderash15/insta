@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Loader2, Sparkles, UserPlus } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import StoryTray from '../../components/feed/StoryTray';
 import PostCard from '../../components/feed/PostCard';
 import PostDetailModal from '../../components/modals/PostDetailModal';
@@ -9,6 +10,7 @@ import CreateModal from '../../components/modals/CreateModal';
 
 export default function FeedPage() {
   const { user } = useAuth();
+  const { socket } = useSocket();
   const [posts, setPosts] = useState([]);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
@@ -54,6 +56,30 @@ export default function FeedPage() {
     fetchFeed(1);
     fetchSuggestions();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handlePostCreated = ({ post }) => {
+      if (post) {
+        setPosts((prev) => [post, ...prev.filter((p) => p._id !== post._id)]);
+      }
+    };
+
+    const handlePostDeletedSocket = ({ postId }) => {
+      if (postId) {
+        setPosts((prev) => prev.filter((p) => p._id !== postId));
+      }
+    };
+
+    socket.on('post:created', handlePostCreated);
+    socket.on('post:deleted', handlePostDeletedSocket);
+
+    return () => {
+      socket.off('post:created', handlePostCreated);
+      socket.off('post:deleted', handlePostDeletedSocket);
+    };
+  }, [socket]);
 
   const handlePostDeleted = (deletedId) => {
     setPosts((prev) => prev.filter((p) => p._id !== deletedId));

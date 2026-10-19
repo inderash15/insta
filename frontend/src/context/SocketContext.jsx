@@ -12,6 +12,8 @@ export const SocketProvider = ({ children }) => {
   const [unreadMessages, setUnreadMessages] = useState(0);
   const [onlineUserIds, setOnlineUserIds] = useState(new Set());
 
+  const [lastSeenMap, setLastSeenMap] = useState({});
+
   // Fetch initial badge counts
   useEffect(() => {
     if (!user) {
@@ -54,7 +56,11 @@ export const SocketProvider = ({ children }) => {
       return;
     }
 
-    const newSocket = io('/', {
+    const socketEndpoint =
+      import.meta.env.VITE_SOCKET_URL ||
+      (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '/');
+
+    const newSocket = io(socketEndpoint, {
       withCredentials: true,
       transports: ['websocket', 'polling']
     });
@@ -62,27 +68,91 @@ export const SocketProvider = ({ children }) => {
     newSocket.on('connect', () => {
       const uId = user._id || user.id;
       newSocket.emit('join_user', uId);
+      newSocket.emit('presence:subscribe', { userId: uId });
+    });
+
+    newSocket.io.on('reconnect', () => {
+      const uId = user._id || user.id;
+      newSocket.emit('join_user', uId);
+      newSocket.emit('presence:subscribe', { userId: uId });
+      // Recover latest badge counts on reconnect
+      api.get('/notifications?limit=1')
+        .then((res) => {
+          if (res.data?.unreadCount !== undefined) {
+            setUnreadNotifications(res.data.unreadCount);
+          }
+        })
+        .catch(() => {});
+      api.get('/conversations')
+        .then((res) => {
+          if (res.data?.conversations) {
+            const totalUnread = res.data.conversations.reduce((acc, c) => acc + (c.unreadCount || 0), 0);
+            setUnreadMessages(totalUnread);
+          }
+        })
+        .catch(() => {});
     });
 
     newSocket.on('new_notification', () => {
       setUnreadNotifications((prev) => prev + 1);
     });
 
+    newSocket.on('notification:created', () => {
+      setUnreadNotifications((prev) => prev + 1);
+    });
+
+    newSocket.on('notification_count_reset', () => {
+      setUnreadNotifications(0);
+    });
+
+    newSocket.on('notifications_marked_read', () => {
+      setUnreadNotifications(0);
+    });
+
+    newSocket.on('notification:read', () => {
+      setUnreadNotifications((prev) => Math.max(0, prev - 1));
+    });
+
     newSocket.on('conversation_updated', () => {
       setUnreadMessages((prev) => prev + 1);
     });
 
-    newSocket.on('user_online', ({ userId }) => {
-      setOnlineUserIds((prev) => new Set([...prev, userId]));
+    newSocket.on('messages_read', ({ userId }) => {
+      const uId = (user._id || user.id)?.toString();
+      if (userId === uId) {
+        setUnreadMessages((prev) => Math.max(0, prev - 1));
+      }
     });
 
-    newSocket.on('user_offline', ({ userId }) => {
-      setOnlineUserIds((prev) => {
-        const next = new Set(prev);
-        next.delete(userId);
-        return next;
-      });
-    });
+    const handleOnlineList = ({ userIds, onlineUserIds: list }) => {
+      setOnlineUserIds(new Set(userIds || list || []));
+    };
+
+    const handleUserOnline = ({ userId }) => {
+      if (userId) {
+        setOnlineUserIds((prev) => new Set([...prev, userId.toString()]));
+      }
+    };
+
+    const handleUserOffline = ({ userId, lastActiveAt }) => {
+      if (userId) {
+        setOnlineUserIds((prev) => {
+          const next = new Set(prev);
+          next.delete(userId.toString());
+          return next;
+        });
+        if (lastActiveAt) {
+          setLastSeenMap((prev) => ({ ...prev, [userId.toString()]: lastActiveAt }));
+        }
+      }
+    };
+
+    newSocket.on('online_users_list', handleOnlineList);
+    newSocket.on('presence:update', handleOnlineList);
+    newSocket.on('user_online', handleUserOnline);
+    newSocket.on('presence:online', handleUserOnline);
+    newSocket.on('user_offline', handleUserOffline);
+    newSocket.on('presence:offline', handleUserOffline);
 
     setSocket(newSocket);
 
@@ -99,7 +169,8 @@ export const SocketProvider = ({ children }) => {
         setUnreadNotifications,
         unreadMessages,
         setUnreadMessages,
-        onlineUserIds
+        onlineUserIds,
+        lastSeenMap
       }}
     >
       {children}

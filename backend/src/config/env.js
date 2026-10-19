@@ -14,6 +14,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().default(5000),
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   CLIENT_ORIGIN: z.string().default('http://localhost:5173'),
+  COOKIE_SAMESITE: z.enum(['lax', 'none', 'strict']).optional(),
+  COOKIE_SECURE: z.preprocess(
+    (val) => (val === 'true' || val === true ? true : val === 'false' || val === false ? false : undefined),
+    z.boolean().optional()
+  ),
   MONGODB_URI: z.string().default('mongodb://127.0.0.1:27017/insta'),
   USE_IN_MEMORY_DB: z.string().default('auto'),
   JWT_SECRET: z.string().min(16).default('insta_jwt_development_secret_key_minimum_32_chars_12345'),

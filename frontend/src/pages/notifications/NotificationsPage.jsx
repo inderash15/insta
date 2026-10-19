@@ -13,7 +13,7 @@ import { useSocket } from '../../context/SocketContext';
 import NotificationsNav from '../../components/notifications/NotificationsNav';
 
 export default function NotificationsPage({ onSelectUser }) {
-  const { setUnreadNotifications } = useSocket();
+  const { socket, setUnreadNotifications } = useSocket();
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -34,6 +34,28 @@ export default function NotificationsPage({ onSelectUser }) {
   useEffect(() => {
     fetchNotifications();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const handleNewNotif = (notif) => {
+      if (notif) {
+        setNotifications((prev) => [notif, ...prev.filter((n) => n._id !== notif._id)]);
+      }
+    };
+    const handleReset = () => {
+      setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+    };
+    socket.on('new_notification', handleNewNotif);
+    socket.on('notification:created', handleNewNotif);
+    socket.on('notification_count_reset', handleReset);
+    socket.on('notifications_marked_read', handleReset);
+    return () => {
+      socket.off('new_notification', handleNewNotif);
+      socket.off('notification:created', handleNewNotif);
+      socket.off('notification_count_reset', handleReset);
+      socket.off('notifications_marked_read', handleReset);
+    };
+  }, [socket]);
 
   const handleMarkAllRead = async () => {
     try {

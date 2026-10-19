@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Heart, 
   MessageCircle, 
@@ -9,19 +9,106 @@ import {
   ChevronRight,
   Flag,
   Trash2,
-  Copy
+  Copy,
+  Check
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 
 export default function PostCard({ post: initialPost, onOpenComments, onPostDeleted }) {
   const { user } = useAuth();
+  const { socket } = useSocket();
   const [post, setPost] = useState(initialPost);
   const [activeMediaIndex, setActiveMediaIndex] = useState(0);
   const [showHeartBurst, setShowHeartBurst] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   const [commentText, setCommentText] = useState('');
   const [submittingComment, setSubmittingComment] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  useEffect(() => {
+    setPost(initialPost);
+  }, [initialPost]);
+
+  useEffect(() => {
+    if (!socket || !post?._id) return;
+    const currentUserId = (user?._id || user?.id)?.toString();
+
+    const handlePostLiked = ({ postId, likesCount, userId }) => {
+      if (postId === post._id) {
+        setPost((curr) => ({
+          ...curr,
+          likesCount,
+          ...(userId?.toString() === currentUserId ? { isLiked: true } : {})
+        }));
+      }
+    };
+
+    const handlePostUnliked = ({ postId, likesCount, userId }) => {
+      if (postId === post._id) {
+        setPost((curr) => ({
+          ...curr,
+          likesCount,
+          ...(userId?.toString() === currentUserId ? { isLiked: false } : {})
+        }));
+      }
+    };
+
+    const handleCommentCreated = ({ postId, commentsCount }) => {
+      if (postId === post._id) {
+        setPost((curr) => ({
+          ...curr,
+          commentsCount: commentsCount !== undefined ? commentsCount : (curr.commentsCount || 0) + 1
+        }));
+      }
+    };
+
+    const handleCommentDeleted = ({ postId, commentsCount }) => {
+      if (postId === post._id) {
+        setPost((curr) => ({
+          ...curr,
+          commentsCount: commentsCount !== undefined ? commentsCount : Math.max(0, (curr.commentsCount || 1) - 1)
+        }));
+      }
+    };
+
+    const handlePostSaved = ({ postId, userId }) => {
+      if (postId === post._id && userId?.toString() === currentUserId) {
+        setPost((curr) => ({ ...curr, isBookmarked: true }));
+      }
+    };
+
+    const handlePostUnsaved = ({ postId, userId }) => {
+      if (postId === post._id && userId?.toString() === currentUserId) {
+        setPost((curr) => ({ ...curr, isBookmarked: false }));
+      }
+    };
+
+    const handlePostDeletedSocket = ({ postId }) => {
+      if (postId === post._id && onPostDeleted) {
+        onPostDeleted(postId);
+      }
+    };
+
+    socket.on('post:liked', handlePostLiked);
+    socket.on('post:unliked', handlePostUnliked);
+    socket.on('comment:created', handleCommentCreated);
+    socket.on('comment:deleted', handleCommentDeleted);
+    socket.on('post:saved', handlePostSaved);
+    socket.on('post:unsaved', handlePostUnsaved);
+    socket.on('post:deleted', handlePostDeletedSocket);
+
+    return () => {
+      socket.off('post:liked', handlePostLiked);
+      socket.off('post:unliked', handlePostUnliked);
+      socket.off('comment:created', handleCommentCreated);
+      socket.off('comment:deleted', handleCommentDeleted);
+      socket.off('post:saved', handlePostSaved);
+      socket.off('post:unsaved', handlePostUnsaved);
+      socket.off('post:deleted', handlePostDeletedSocket);
+    };
+  }, [socket, post?._id, user, onPostDeleted]);
 
   const handleToggleLike = async () => {
     const prevLiked = post.isLiked;

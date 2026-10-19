@@ -1,7 +1,7 @@
 import { Conversation } from '../models/Conversation.js';
 import { Message } from '../models/Message.js';
 import { User } from '../models/User.js';
-import { getIO } from '../config/socket.js';
+import { getIO, isUserOnline } from '../config/socket.js';
 
 // GET /api/conversations
 export const getConversations = async (req, res, next) => {
@@ -12,7 +12,7 @@ export const getConversations = async (req, res, next) => {
       participants: userId
     })
       .sort({ lastMessageAt: -1 })
-      .populate('participants', 'username fullName avatarUrl isVerified isPrivate')
+      .populate('participants', 'username fullName avatarUrl isVerified isPrivate lastActiveAt')
       .populate({
         path: 'lastMessage',
         populate: { path: 'sender', select: 'username fullName avatarUrl' }
@@ -65,7 +65,7 @@ export const getOrCreateConversation = async (req, res, next) => {
     let conv = await Conversation.findOne({
       participants: { $all: [currentUserId, recipientId], $size: 2 }
     })
-      .populate('participants', 'username fullName avatarUrl isVerified isPrivate')
+      .populate('participants', 'username fullName avatarUrl isVerified isPrivate lastActiveAt')
       .populate({
         path: 'lastMessage',
         populate: { path: 'sender', select: 'username fullName avatarUrl' }
@@ -81,7 +81,7 @@ export const getOrCreateConversation = async (req, res, next) => {
       });
 
       conv = await Conversation.findById(conv._id)
-        .populate('participants', 'username fullName avatarUrl isVerified isPrivate');
+        .populate('participants', 'username fullName avatarUrl isVerified isPrivate lastActiveAt');
     }
 
     const obj = conv.toJSON();
@@ -114,6 +114,36 @@ export const getMessages = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Conversation not found or unauthorized' });
     }
 
+    // Mark unread incoming messages as read by current user
+    const now = new Date();
+    await Message.updateMany(
+      { conversation: conversationId, sender: { $ne: currentUserId }, 'readBy.user': { $ne: currentUserId } },
+      { $push: { readBy: { user: currentUserId, readAt: now } } }
+    );
+
+    // Reset unread count for current user
+    const unreadKey = `unreadCounts.${currentUserId.toString()}`;
+    await Conversation.findByIdAndUpdate(conversationId, {
+      $set: { [unreadKey]: 0 }
+    });
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`conversation:${conversationId}`).emit('messages_read', {
+          conversationId,
+          userId: currentUserId,
+          readAt: now
+        });
+        io.to(`conversation:${conversationId}`).emit('message:receipt', {
+          conversationId,
+          userId: currentUserId,
+          readAt: now,
+          status: 'seen'
+        });
+      }
+    } catch (e) {}
+
     const messages = await Message.find({
       conversation: conversationId,
       isDeleted: false
@@ -122,12 +152,6 @@ export const getMessages = async (req, res, next) => {
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('sender', 'username fullName avatarUrl isVerified');
-
-    // Reset unread count for current user
-    const unreadKey = `unreadCounts.${currentUserId.toString()}`;
-    await Conversation.findByIdAndUpdate(conversationId, {
-      $set: { [unreadKey]: 0 }
-    });
 
     return res.status(200).json({
       success: true,
@@ -167,13 +191,24 @@ export const sendMessage = async (req, res, next) => {
       return res.status(400).json({ success: false, message: 'Message text or media is required' });
     }
 
+    const now = new Date();
+    const deliveredTo = [];
+    for (const p of conv.participants) {
+      const pStr = p.toString();
+      if (pStr !== currentUserId.toString() && isUserOnline(pStr)) {
+        deliveredTo.push({ user: p, deliveredAt: now });
+      }
+    }
+
     const message = await Message.create({
       conversation: conversationId,
       sender: currentUserId,
       text,
       mediaUrl,
       mediaType,
-      readBy: [{ user: currentUserId, readAt: new Date() }]
+      sentAt: now,
+      deliveredTo,
+      readBy: []
     });
 
     await message.populate('sender', 'username fullName avatarUrl isVerified');
@@ -202,6 +237,21 @@ export const sendMessage = async (req, res, next) => {
           conversationId,
           message
         });
+
+        // Emit sent confirmation to sender
+        io.to(`user:${currentUserId.toString()}`).emit('message:sent', {
+          conversationId,
+          message
+        });
+
+        // If recipient was already online, emit delivery confirmation
+        if (deliveredTo.length > 0) {
+          io.to(`conversation:${conversationId}`).emit('message:delivered', {
+            conversationId,
+            messageId: message._id,
+            deliveredTo
+          });
+        }
 
         // Notify other participants for unread badges and conversation list updates
         for (const p of conv.participants) {
@@ -239,7 +289,30 @@ export const markConversationRead = async (req, res, next) => {
       { $set: { [unreadKey]: 0 } }
     );
 
-    return res.status(200).json({ success: true, message: 'Conversation marked as read' });
+    const now = new Date();
+    await Message.updateMany(
+      { conversation: conversationId, sender: { $ne: currentUserId }, 'readBy.user': { $ne: currentUserId } },
+      { $push: { readBy: { user: currentUserId, readAt: now } } }
+    );
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`conversation:${conversationId}`).emit('messages_read', {
+          conversationId,
+          userId: currentUserId,
+          readAt: now
+        });
+        io.to(`conversation:${conversationId}`).emit('message:receipt', {
+          conversationId,
+          userId: currentUserId,
+          readAt: now,
+          status: 'seen'
+        });
+      }
+    } catch (e) {}
+
+    return res.status(200).json({ success: true, message: 'Conversation marked as read', readAt: now });
   } catch (err) {
     next(err);
   }

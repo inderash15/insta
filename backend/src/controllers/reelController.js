@@ -3,6 +3,7 @@ import { Like } from '../models/Like.js';
 import { User } from '../models/User.js';
 import { Follow } from '../models/Follow.js';
 import { createNotification } from './notificationController.js';
+import { getIO } from '../config/socket.js';
 
 const parseHashtags = (text) => {
   if (!text) return [];
@@ -31,6 +32,13 @@ export const createReel = async (req, res, next) => {
     });
 
     await reel.populate('author', 'username fullName avatarUrl isVerified');
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('reel:created', { reel });
+      }
+    } catch (e) {}
 
     return res.status(201).json({
       success: true,
@@ -133,7 +141,13 @@ export const getReelById = async (req, res, next) => {
 // POST /api/reels/:id/view
 export const viewReel = async (req, res, next) => {
   try {
-    await Reel.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+    const updated = await Reel.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } }, { new: true });
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('reel:viewed', { reelId: req.params.id, viewsCount: updated?.viewsCount || 1 });
+      }
+    } catch (e) {}
     return res.status(200).json({ success: true, message: 'View counted' });
   } catch (err) {
     next(err);
@@ -161,7 +175,14 @@ export const toggleLikeReel = async (req, res, next) => {
         { $inc: { likesCount: -1 } },
         { new: true }
       );
-      return res.status(200).json({ success: true, liked: false, likesCount: Math.max(0, updated.likesCount) });
+      const newCount = Math.max(0, updated.likesCount);
+      try {
+        const io = getIO();
+        if (io) {
+          io.emit('reel:unliked', { reelId: reel._id, likesCount: newCount, userId: req.user._id });
+        }
+      } catch (e) {}
+      return res.status(200).json({ success: true, liked: false, likesCount: newCount });
     }
 
     await Like.create({
@@ -175,6 +196,13 @@ export const toggleLikeReel = async (req, res, next) => {
       { $inc: { likesCount: 1 } },
       { new: true }
     );
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('reel:liked', { reelId: reel._id, likesCount: updated.likesCount, userId: req.user._id });
+      }
+    } catch (e) {}
 
     // Notify author asynchronously
     createNotification({
@@ -207,6 +235,13 @@ export const deleteReel = async (req, res, next) => {
 
     await Reel.findByIdAndDelete(reel._id);
     await Like.deleteMany({ targetType: 'reel', targetId: reel._id });
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('reel:deleted', { reelId: reel._id });
+      }
+    } catch (e) {}
 
     return res.status(200).json({ success: true, message: 'Reel deleted' });
   } catch (err) {

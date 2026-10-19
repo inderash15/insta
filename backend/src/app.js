@@ -8,6 +8,7 @@ import { fileURLToPath } from 'url';
 import rateLimit from 'express-rate-limit';
 
 import { env } from './config/env.js';
+import { corsOptions } from './config/cors.js';
 import healthRoutes from './routes/health.js';
 import authRoutes from './routes/auth.js';
 import userRoutes from './routes/users.js';
@@ -34,12 +35,7 @@ app.use(helmet({
 }));
 
 // CORS configuration
-app.use(cors({
-  origin: env.CLIENT_ORIGIN,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With']
-}));
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({

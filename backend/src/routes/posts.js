@@ -27,6 +27,7 @@ router.delete('/:id', requireAuth, deletePost);
 // Likes and bookmarks
 router.post('/:id/like', requireAuth, toggleLike);
 router.post('/:id/bookmark', requireAuth, toggleBookmark);
+router.post('/:id/save', requireAuth, toggleBookmark);
 
 // Comments
 router.post('/:id/comments', requireAuth, addComment);

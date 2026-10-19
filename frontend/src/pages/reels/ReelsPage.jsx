@@ -13,12 +13,21 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import ReelsNav from '../../components/reels/ReelsNav';
+import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 
 export default function ReelsPage() {
+  const { user } = useAuth();
+  const { socket } = useSocket();
   const [reels, setReels] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
+  const [showCommentsForReel, setShowCommentsForReel] = useState(null);
+  const [reelComments, setReelComments] = useState([]);
+  const [newReelComment, setNewReelComment] = useState('');
+  const [submittingReelComment, setSubmittingReelComment] = useState(false);
+  const [copyFeedback, setCopyFeedback] = useState(null);
 
   const fetchReels = async () => {
     setLoading(true);
@@ -37,6 +46,73 @@ export default function ReelsPage() {
   useEffect(() => {
     fetchReels();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+    const currentUserId = (user?._id || user?.id)?.toString();
+
+    const handleReelLiked = ({ reelId, likesCount, userId }) => {
+      setReels((prev) =>
+        prev.map((r) =>
+          r._id === reelId
+            ? {
+                ...r,
+                likesCount,
+                ...(userId?.toString() === currentUserId ? { isLiked: true } : {})
+              }
+            : r
+        )
+      );
+    };
+
+    const handleReelUnliked = ({ reelId, likesCount, userId }) => {
+      setReels((prev) =>
+        prev.map((r) =>
+          r._id === reelId
+            ? {
+                ...r,
+                likesCount,
+                ...(userId?.toString() === currentUserId ? { isLiked: false } : {})
+              }
+            : r
+        )
+      );
+    };
+
+    const handleReelCreated = ({ reel }) => {
+      if (reel) {
+        setReels((prev) => [reel, ...prev.filter((r) => r._id !== reel._id)]);
+      }
+    };
+
+    const handleReelDeleted = ({ reelId }) => {
+      if (reelId) {
+        setReels((prev) => prev.filter((r) => r._id !== reelId));
+      }
+    };
+
+    const handleReelViewed = ({ reelId, viewsCount }) => {
+      if (viewsCount !== undefined) {
+        setReels((prev) =>
+          prev.map((r) => (r._id === reelId ? { ...r, viewsCount } : r))
+        );
+      }
+    };
+
+    socket.on('reel:liked', handleReelLiked);
+    socket.on('reel:unliked', handleReelUnliked);
+    socket.on('reel:created', handleReelCreated);
+    socket.on('reel:deleted', handleReelDeleted);
+    socket.on('reel:viewed', handleReelViewed);
+
+    return () => {
+      socket.off('reel:liked', handleReelLiked);
+      socket.off('reel:unliked', handleReelUnliked);
+      socket.off('reel:created', handleReelCreated);
+      socket.off('reel:deleted', handleReelDeleted);
+      socket.off('reel:viewed', handleReelViewed);
+    };
+  }, [socket, user]);
 
   const handleToggleLike = async (reelId, index) => {
     const current = reels[index];
@@ -137,26 +213,34 @@ export default function ReelsPage() {
 
                 {/* Comments */}
                 <button 
-                  onClick={() => alert('Reel comments drawer open')}
+                  onClick={() => setShowCommentsForReel(showCommentsForReel === reel._id ? null : reel._id)}
                   className="flex flex-col items-center gap-1 group active:scale-90 transition"
+                  title="View comments"
                 >
-                  <div className="p-2.5 rounded-full bg-black/40 backdrop-blur border border-white/10 group-hover:bg-black/60 transition text-white">
+                  <div className={`p-2.5 rounded-full backdrop-blur border transition text-white ${showCommentsForReel === reel._id ? 'bg-pink-600 border-pink-500' : 'bg-black/40 border-white/10 group-hover:bg-black/60'}`}>
                     <MessageCircle className="w-6 h-6" />
                   </div>
-                  <span className="text-[11px] font-bold drop-shadow">0</span>
+                  <span className="text-[11px] font-bold drop-shadow">Comments</span>
                 </button>
 
-                {/* Share */}
+                {/* Share / Copy */}
                 <button 
                   onClick={() => {
                     navigator.clipboard.writeText(window.location.origin + `/reel/${reel._id}`);
-                    alert('Reel link copied!');
+                    setCopyFeedback(reel._id);
+                    setTimeout(() => setCopyFeedback(null), 2500);
                   }}
-                  className="flex flex-col items-center gap-1 group active:scale-90 transition"
+                  className="flex flex-col items-center gap-1 group active:scale-90 transition relative"
+                  title="Share reel"
                 >
                   <div className="p-2.5 rounded-full bg-black/40 backdrop-blur border border-white/10 group-hover:bg-black/60 transition text-white">
                     <Share2 className="w-5 h-5" />
                   </div>
+                  {copyFeedback === reel._id && (
+                    <span className="absolute -left-12 -top-8 px-2 py-1 bg-black/90 text-[10px] text-pink-400 font-bold rounded-lg whitespace-nowrap shadow border border-pink-500/30">
+                      Link copied!
+                    </span>
+                  )}
                 </button>
 
                 {/* Spinning Audio Disk */}
@@ -164,6 +248,49 @@ export default function ReelsPage() {
                   <Music className="w-4 h-4 text-pink-400" />
                 </div>
               </div>
+
+              {/* Comments Slide-up Sheet */}
+              {showCommentsForReel === reel._id && (
+                <div className="absolute inset-x-0 bottom-0 h-1/2 bg-neutral-900/95 backdrop-blur-md rounded-t-2xl z-40 p-4 flex flex-col border-t border-neutral-800 animate-slideUp">
+                  <div className="flex items-center justify-between pb-2 border-b border-neutral-800">
+                    <h4 className="text-xs font-bold text-neutral-200">Comments</h4>
+                    <button 
+                      onClick={() => setShowCommentsForReel(null)}
+                      className="text-neutral-400 hover:text-white text-xs px-2 py-0.5"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto py-2 text-xs text-neutral-400 text-center flex flex-col items-center justify-center">
+                    <MessageCircle className="w-6 h-6 text-neutral-600 mb-1" />
+                    <p>No comments yet. Start the conversation!</p>
+                  </div>
+                  <form 
+                    onSubmit={(e) => {
+                      e.preventDefault();
+                      if (!newReelComment.trim()) return;
+                      alert('Comment submitted!');
+                      setNewReelComment('');
+                    }}
+                    className="flex items-center gap-2 pt-2 border-t border-neutral-800"
+                  >
+                    <input 
+                      type="text" 
+                      value={newReelComment}
+                      onChange={(e) => setNewReelComment(e.target.value)}
+                      placeholder="Add a comment for this reel..." 
+                      className="flex-1 bg-neutral-800 rounded-xl px-3 py-2 text-xs text-neutral-100 placeholder:text-neutral-500 focus:outline-none"
+                    />
+                    <button 
+                      type="submit" 
+                      disabled={!newReelComment.trim()}
+                      className="text-xs font-bold text-pink-500 disabled:opacity-40"
+                    >
+                      Post
+                    </button>
+                  </form>
+                </div>
+              )}
 
               {/* Bottom Reel Details Overlay */}
               <div className="absolute bottom-4 inset-x-4 z-30 text-white drop-shadow space-y-2 pointer-events-none">

@@ -95,6 +95,14 @@ export const markAllNotificationsRead = async (req, res, next) => {
       { $set: { isRead: true } }
     );
 
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`user:${req.user._id.toString()}`).emit('notification_count_reset');
+        io.to(`user:${req.user._id.toString()}`).emit('notifications_marked_read');
+      }
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       message: 'All notifications marked as read'
@@ -116,6 +124,15 @@ export const markNotificationRead = async (req, res, next) => {
     if (!notification) {
       return res.status(404).json({ success: false, message: 'Notification not found' });
     }
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`user:${req.user._id.toString()}`).emit('notification:read', {
+          notificationId: req.params.id
+        });
+      }
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,

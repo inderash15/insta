@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { User } from '../models/User.js';
 import { Follow } from '../models/Follow.js';
 import { createNotification } from './notificationController.js';
+import { getIO } from '../config/socket.js';
 
 
 const updateProfileSchema = z.object({
@@ -76,6 +77,9 @@ export const getProfile = async (req, res, next) => {
     }
 
     const profileData = targetUser.toJSON();
+    if (!relationship.isSelf && targetUser.preferences?.showActivityStatus === false) {
+      delete profileData.lastActiveAt;
+    }
     return res.status(200).json({
       success: true,
       profile: {
@@ -190,6 +194,27 @@ export const followUser = async (req, res, next) => {
       await User.findByIdAndUpdate(req.user._id, { $inc: { 'counts.following': 1 } });
     }
 
+    try {
+      const io = getIO();
+      if (io) {
+        if (status === 'accepted') {
+          io.to(`user:${targetUser._id}`).emit('follower_count_updated', {
+            userId: targetUser._id,
+            countChange: 1
+          });
+          io.to(`user:${req.user._id}`).emit('following_count_updated', {
+            userId: req.user._id,
+            countChange: 1
+          });
+        }
+        io.emit('follow:created', {
+          followerId: req.user._id,
+          followingId: targetUser._id,
+          status
+        });
+      }
+    } catch (e) {}
+
     // Send notification
     createNotification({
       recipient: targetUser._id,
@@ -229,6 +254,26 @@ export const unfollowUser = async (req, res, next) => {
       await User.findByIdAndUpdate(targetId, { $inc: { 'counts.followers': -1 } });
       await User.findByIdAndUpdate(req.user._id, { $inc: { 'counts.following': -1 } });
     }
+
+    try {
+      const io = getIO();
+      if (io) {
+        if (follow.status === 'accepted') {
+          io.to(`user:${targetId}`).emit('follower_count_updated', {
+            userId: targetId,
+            countChange: -1
+          });
+          io.to(`user:${req.user._id}`).emit('following_count_updated', {
+            userId: req.user._id,
+            countChange: -1
+          });
+        }
+        io.emit('follow:removed', {
+          followerId: req.user._id,
+          followingId: targetId
+        });
+      }
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,
@@ -277,6 +322,23 @@ export const acceptFollowRequest = async (req, res, next) => {
 
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'counts.followers': 1 } });
     await User.findByIdAndUpdate(requesterUserId, { $inc: { 'counts.following': 1 } });
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`user:${req.user._id}`).emit('follower_count_updated', {
+          userId: req.user._id,
+          countChange: 1
+        });
+        io.to(`user:${requesterUserId}`).emit('following_count_updated', {
+          userId: requesterUserId,
+          countChange: 1
+        });
+        io.to(`user:${requesterUserId}`).emit('follow:accepted', {
+          userId: req.user._id
+        });
+      }
+    } catch (e) {}
 
     return res.status(200).json({
       success: true,

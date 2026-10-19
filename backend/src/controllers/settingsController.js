@@ -33,11 +33,13 @@ export const updatePreferences = async (req, res, next) => {
 
     if (!user.preferences) user.preferences = {};
 
-    const { theme, notifications, accessibility, language } = req.body;
+    const { theme, notifications, accessibility, language, showActivityStatus, showReadReceipts } = req.body;
     if (theme) user.preferences.theme = theme;
     if (notifications) user.preferences.notifications = { ...user.preferences.notifications, ...notifications };
     if (accessibility) user.preferences.accessibility = { ...user.preferences.accessibility, ...accessibility };
     if (language) user.preferences.language = language;
+    if (showActivityStatus !== undefined) user.preferences.showActivityStatus = Boolean(showActivityStatus);
+    if (showReadReceipts !== undefined) user.preferences.showReadReceipts = Boolean(showReadReceipts);
 
     user.markModified('preferences');
     await user.save();

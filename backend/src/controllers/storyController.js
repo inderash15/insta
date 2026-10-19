@@ -1,6 +1,7 @@
 import { Story } from '../models/Story.js';
 import { Follow } from '../models/Follow.js';
 import { User } from '../models/User.js';
+import { getIO } from '../config/socket.js';
 
 // POST /api/stories
 export const createStory = async (req, res, next) => {
@@ -21,6 +22,13 @@ export const createStory = async (req, res, next) => {
     });
 
     await story.populate('author', 'username fullName avatarUrl isVerified');
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('story:created', { story, author: story.author });
+      }
+    } catch (e) {}
 
     return res.status(201).json({
       success: true,
@@ -108,6 +116,17 @@ export const recordView = async (req, res, next) => {
     if (!alreadyViewed && !story.author.equals(req.user._id)) {
       story.viewers.push({ user: req.user._id, viewedAt: new Date() });
       await story.save();
+
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`user:${story.author.toString()}`).emit('story:viewed', {
+            storyId: story._id,
+            viewersCount: story.viewers.length,
+            viewerId: req.user._id
+          });
+        }
+      } catch (e) {}
     }
 
     return res.status(200).json({ success: true, viewed: true });
@@ -181,6 +200,14 @@ export const deleteStory = async (req, res, next) => {
     }
 
     await Story.findByIdAndDelete(story._id);
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('story:deleted', { storyId: story._id });
+      }
+    } catch (e) {}
+
     return res.status(200).json({ success: true, message: 'Story deleted' });
   } catch (err) {
     next(err);

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSkeleton from '../../components/common/LoadingSkeleton';
 
@@ -23,6 +24,7 @@ export default function PostDetailPage() {
   const { postId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { socket } = useSocket();
 
   const [post, setPost] = useState(null);
   const [comments, setComments] = useState([]);
@@ -63,24 +65,99 @@ export default function PostDetailPage() {
     loadPostData();
   }, [postId]);
 
+  useEffect(() => {
+    if (!socket || !postId) return;
+    const currentUserId = (user?._id || user?.id)?.toString();
+
+    const handlePostLiked = ({ postId: pId, likesCount: count, userId }) => {
+      if (pId === postId) {
+        setLikesCount(count);
+        if (userId?.toString() === currentUserId) {
+          setIsLiked(true);
+        }
+      }
+    };
+
+    const handlePostUnliked = ({ postId: pId, likesCount: count, userId }) => {
+      if (pId === postId) {
+        setLikesCount(count);
+        if (userId?.toString() === currentUserId) {
+          setIsLiked(false);
+        }
+      }
+    };
+
+    const handleCommentCreated = ({ postId: pId, comment }) => {
+      if (pId === postId && comment) {
+        setComments((prev) => {
+          if (prev.some((c) => c._id === comment._id)) return prev;
+          return [...prev, comment];
+        });
+      }
+    };
+
+    const handleCommentDeleted = ({ postId: pId, commentId }) => {
+      if (pId === postId) {
+        setComments((prev) => prev.filter((c) => c._id !== commentId));
+      }
+    };
+
+    const handlePostSaved = ({ postId: pId, userId }) => {
+      if (pId === postId && userId?.toString() === currentUserId) {
+        setIsBookmarked(true);
+      }
+    };
+
+    const handlePostUnsaved = ({ postId: pId, userId }) => {
+      if (pId === postId && userId?.toString() === currentUserId) {
+        setIsBookmarked(false);
+      }
+    };
+
+    socket.on('post:liked', handlePostLiked);
+    socket.on('post:unliked', handlePostUnliked);
+    socket.on('comment:created', handleCommentCreated);
+    socket.on('comment:deleted', handleCommentDeleted);
+    socket.on('post:saved', handlePostSaved);
+    socket.on('post:unsaved', handlePostUnsaved);
+
+    return () => {
+      socket.off('post:liked', handlePostLiked);
+      socket.off('post:unliked', handlePostUnliked);
+      socket.off('comment:created', handleCommentCreated);
+      socket.off('comment:deleted', handleCommentDeleted);
+      socket.off('post:saved', handlePostSaved);
+      socket.off('post:unsaved', handlePostUnsaved);
+    };
+  }, [socket, postId, user]);
+
   const handleToggleLike = async () => {
+    const prevLiked = isLiked;
+    const prevCount = likesCount;
+    const nextLiked = !prevLiked;
+
+    setIsLiked(nextLiked);
+    setLikesCount(nextLiked ? prevCount + 1 : Math.max(0, prevCount - 1));
+
     try {
-      const nextLiked = !isLiked;
-      setIsLiked(nextLiked);
-      setLikesCount((prev) => (nextLiked ? prev + 1 : Math.max(0, prev - 1)));
-      await api.post(`/posts/${postId}/like`);
+      const res = await api.post(`/posts/${postId}/like`);
+      setIsLiked(res.data.liked);
+      setLikesCount(res.data.likesCount);
     } catch (err) {
-      console.error(err);
+      setIsLiked(prevLiked);
+      setLikesCount(prevCount);
     }
   };
 
   const handleToggleBookmark = async () => {
+    const prevSaved = isBookmarked;
+    setIsBookmarked(!prevSaved);
+
     try {
-      const nextSaved = !isBookmarked;
-      setIsBookmarked(nextSaved);
-      await api.post(`/posts/${postId}/save`);
+      const res = await api.post(`/posts/${postId}/bookmark`);
+      setIsBookmarked(res.data.bookmarked);
     } catch (err) {
-      console.error(err);
+      setIsBookmarked(prevSaved);
     }
   };
 
@@ -90,9 +167,12 @@ export default function PostDetailPage() {
 
     try {
       setCommentSubmitting(true);
-      const res = await api.post(`/posts/${postId}/comments`, { content: newComment.trim() });
+      const res = await api.post(`/posts/${postId}/comments`, { text: newComment.trim() });
       if (res.data?.success) {
-        setComments((prev) => [...prev, res.data.comment]);
+        setComments((prev) => {
+          if (prev.some((c) => c._id === res.data.comment._id)) return prev;
+          return [...prev, res.data.comment];
+        });
         setNewComment('');
       }
     } catch (err) {

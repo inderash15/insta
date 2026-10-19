@@ -6,6 +6,7 @@ import { Bookmark } from '../models/Bookmark.js';
 import { Follow } from '../models/Follow.js';
 import { User } from '../models/User.js';
 import { createNotification } from './notificationController.js';
+import { getIO } from '../config/socket.js';
 
 
 const parseHashtags = (text) => {
@@ -50,6 +51,13 @@ export const createPost = async (req, res, next) => {
     await User.findByIdAndUpdate(req.user._id, { $inc: { 'counts.posts': 1 } });
 
     await post.populate('author', 'username fullName avatarUrl isVerified');
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('post:created', { post });
+      }
+    } catch (e) {}
 
     return res.status(201).json({
       success: true,
@@ -172,6 +180,13 @@ export const deletePost = async (req, res, next) => {
       Bookmark.deleteMany({ post: post._id })
     ]);
 
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('post:deleted', { postId: post._id, authorId: post.author });
+      }
+    } catch (e) {}
+
     return res.status(200).json({ success: true, message: 'Post deleted successfully' });
   } catch (err) {
     next(err);
@@ -200,7 +215,14 @@ export const toggleLike = async (req, res, next) => {
         { $inc: { likesCount: -1 } },
         { new: true }
       );
-      return res.status(200).json({ success: true, liked: false, likesCount: Math.max(0, updated.likesCount) });
+      const newCount = Math.max(0, updated.likesCount);
+      try {
+        const io = getIO();
+        if (io) {
+          io.emit('post:unliked', { postId: post._id, likesCount: newCount, userId: req.user._id });
+        }
+      } catch (e) {}
+      return res.status(200).json({ success: true, liked: false, likesCount: newCount });
     }
 
     // Like
@@ -215,6 +237,13 @@ export const toggleLike = async (req, res, next) => {
       { $inc: { likesCount: 1 } },
       { new: true }
     );
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('post:liked', { postId: post._id, likesCount: updated.likesCount, userId: req.user._id });
+      }
+    } catch (e) {}
 
     // Notify author asynchronously
     createNotification({
@@ -245,6 +274,12 @@ export const toggleBookmark = async (req, res, next) => {
 
     if (existing) {
       await Bookmark.findByIdAndDelete(existing._id);
+      try {
+        const io = getIO();
+        if (io) {
+          io.to(`user:${req.user._id}`).emit('post:unsaved', { postId: post._id, userId: req.user._id });
+        }
+      } catch (e) {}
       return res.status(200).json({ success: true, bookmarked: false, message: 'Post removed from saved' });
     }
 
@@ -252,6 +287,13 @@ export const toggleBookmark = async (req, res, next) => {
       user: req.user._id,
       post: post._id
     });
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`user:${req.user._id}`).emit('post:saved', { postId: post._id, userId: req.user._id });
+      }
+    } catch (e) {}
 
     return res.status(200).json({ success: true, bookmarked: true, message: 'Post saved' });
   } catch (err) {
@@ -289,7 +331,7 @@ export const getSavedPosts = async (req, res, next) => {
 // POST /api/posts/:id/comments
 export const addComment = async (req, res, next) => {
   try {
-    const text = req.body.text?.trim();
+    const text = (req.body.text || req.body.content)?.trim();
     if (!text) {
       return res.status(400).json({ success: false, message: 'Comment text cannot be empty' });
     }
@@ -310,9 +352,24 @@ export const addComment = async (req, res, next) => {
       parentComment: req.body.parentComment || null
     });
 
-    await Post.findByIdAndUpdate(post._id, { $inc: { commentsCount: 1 } });
+    const updatedPost = await Post.findByIdAndUpdate(
+      post._id,
+      { $inc: { commentsCount: 1 } },
+      { new: true }
+    );
 
     await comment.populate('author', 'username fullName avatarUrl isVerified');
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('comment:created', {
+          postId: post._id,
+          comment,
+          commentsCount: updatedPost?.commentsCount || ((post.commentsCount || 0) + 1)
+        });
+      }
+    } catch (e) {}
 
     // Notify post author asynchronously
     createNotification({
@@ -369,9 +426,26 @@ export const deleteComment = async (req, res, next) => {
     }
 
     await Comment.findByIdAndDelete(comment._id);
+    let updatedCommentsCount = 0;
     if (post) {
-      await Post.findByIdAndUpdate(post._id, { $inc: { commentsCount: -1 } });
+      const updatedPost = await Post.findByIdAndUpdate(
+        post._id,
+        { $inc: { commentsCount: -1 } },
+        { new: true }
+      );
+      updatedCommentsCount = Math.max(0, updatedPost?.commentsCount || 0);
     }
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('comment:deleted', {
+          postId: comment.post,
+          commentId: comment._id,
+          commentsCount: updatedCommentsCount
+        });
+      }
+    } catch (e) {}
 
     return res.status(200).json({ success: true, message: 'Comment deleted' });
   } catch (err) {

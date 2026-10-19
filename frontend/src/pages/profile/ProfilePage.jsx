@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import EditProfileModal from '../../components/modals/EditProfileModal';
 import PostDetailModal from '../../components/modals/PostDetailModal';
 
@@ -26,6 +27,7 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
   const { username: routeUsername } = useParams();
   const navigate = useNavigate();
   const { user: currentUser } = useAuth();
+  const { socket } = useSocket();
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [savedPosts, setSavedPosts] = useState([]);
@@ -74,6 +76,90 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
       fetchSavedPosts();
     }
   }, [usernameToFetch, isSelf]);
+
+  useEffect(() => {
+    if (!socket || !profile?._id) return;
+    const pId = profile._id.toString();
+    const myId = (currentUser?._id || currentUser?.id)?.toString();
+
+    const handleFollowerCount = ({ userId, countChange }) => {
+      if (userId?.toString() === pId) {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                counts: {
+                  ...prev.counts,
+                  followers: Math.max(0, (prev.counts?.followers || 0) + countChange)
+                }
+              }
+            : prev
+        );
+      }
+    };
+
+    const handleFollowingCount = ({ userId, countChange }) => {
+      if (userId?.toString() === pId) {
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                counts: {
+                  ...prev.counts,
+                  following: Math.max(0, (prev.counts?.following || 0) + countChange)
+                }
+              }
+            : prev
+        );
+      }
+    };
+
+    const handlePostCreated = ({ post }) => {
+      if (post && post.author?._id?.toString() === pId) {
+        setPosts((prev) => [post, ...prev.filter((p) => p._id !== post._id)]);
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                counts: {
+                  ...prev.counts,
+                  posts: (prev.counts?.posts || 0) + 1
+                }
+              }
+            : prev
+        );
+      }
+    };
+
+    const handlePostDeleted = ({ postId, authorId }) => {
+      if (authorId?.toString() === pId || posts.some((p) => p._id === postId)) {
+        setPosts((prev) => prev.filter((p) => p._id !== postId));
+        setProfile((prev) =>
+          prev
+            ? {
+                ...prev,
+                counts: {
+                  ...prev.counts,
+                  posts: Math.max(0, (prev.counts?.posts || 1) - 1)
+                }
+              }
+            : prev
+        );
+      }
+    };
+
+    socket.on('follower_count_updated', handleFollowerCount);
+    socket.on('following_count_updated', handleFollowingCount);
+    socket.on('post:created', handlePostCreated);
+    socket.on('post:deleted', handlePostDeleted);
+
+    return () => {
+      socket.off('follower_count_updated', handleFollowerCount);
+      socket.off('following_count_updated', handleFollowingCount);
+      socket.off('post:created', handlePostCreated);
+      socket.off('post:deleted', handlePostDeleted);
+    };
+  }, [socket, profile?._id, currentUser, posts]);
 
   const handleFollowToggle = async () => {
     if (!profile) return;

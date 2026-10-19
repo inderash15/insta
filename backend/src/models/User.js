@@ -66,6 +66,10 @@ const userSchema = new mongoose.Schema(
       enum: ['user', 'moderator', 'admin'],
       default: 'user'
     },
+    lastActiveAt: {
+      type: Date,
+      default: Date.now
+    },
     counts: {
       posts: { type: Number, default: 0, min: 0 },
       followers: { type: Number, default: 0, min: 0 },
@@ -91,6 +95,8 @@ const userSchema = new mongoose.Schema(
         reduceMotion: { type: Boolean, default: false },
         captions: { type: Boolean, default: true }
       },
+      showActivityStatus: { type: Boolean, default: true },
+      showReadReceipts: { type: Boolean, default: true },
       language: { type: String, default: 'en' }
     }
   },

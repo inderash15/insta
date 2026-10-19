@@ -2,10 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { Plus } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
+import { useSocket } from '../../context/SocketContext';
 import StoryViewerModal from '../modals/StoryViewerModal';
 
 export default function StoryTray({ onOpenCreateStory }) {
   const { user } = useAuth();
+  const { socket } = useSocket();
   const [tray, setTray] = useState([]);
   const [selectedGroup, setSelectedGroup] = useState(null);
 
@@ -23,6 +25,22 @@ export default function StoryTray({ onOpenCreateStory }) {
   useEffect(() => {
     fetchStories();
   }, []);
+
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleStoryUpdate = () => {
+      fetchStories();
+    };
+
+    socket.on('story:created', handleStoryUpdate);
+    socket.on('story:deleted', handleStoryUpdate);
+
+    return () => {
+      socket.off('story:created', handleStoryUpdate);
+      socket.off('story:deleted', handleStoryUpdate);
+    };
+  }, [socket]);
 
   return (
     <>
@@ -49,10 +67,12 @@ export default function StoryTray({ onOpenCreateStory }) {
 
           {/* Active Followed Stories */}
           {tray.map((group) => {
+            const author = group.author || group.user;
             const hasUnviewed = group.hasUnviewed;
+            const authorId = author?._id || author?.id;
             return (
               <div
-                key={group.user?._id || group.user?.id}
+                key={authorId}
                 onClick={() => setSelectedGroup(group)}
                 className="flex flex-col items-center gap-1.5 shrink-0 cursor-pointer group"
               >
@@ -65,16 +85,16 @@ export default function StoryTray({ onOpenCreateStory }) {
                 >
                   <div className="w-full h-full bg-neutral-950 rounded-full p-0.5">
                     <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center font-bold text-sm text-neutral-200 overflow-hidden">
-                      {group.user?.avatarUrl ? (
-                        <img src={group.user.avatarUrl} alt="" className="w-full h-full object-cover" />
+                      {author?.avatarUrl ? (
+                        <img src={author.avatarUrl} alt="" className="w-full h-full object-cover" />
                       ) : (
-                        group.user?.username?.charAt(0).toUpperCase() || 'U'
+                        author?.username?.charAt(0).toUpperCase() || 'U'
                       )}
                     </div>
                   </div>
                 </div>
                 <span className="text-[11px] text-neutral-300 font-medium truncate max-w-[70px]">
-                  {group.user?.username}
+                  {author?.username}
                 </span>
               </div>
             );

@@ -24,7 +24,7 @@ export default function DirectConversationPage() {
   const { conversationId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { socket } = useSocket();
+  const { socket, onlineUserIds, lastSeenMap } = useSocket();
 
   const [conversation, setConversation] = useState(null);
   const [otherProfile, setOtherProfile] = useState(null);
@@ -37,10 +37,18 @@ export default function DirectConversationPage() {
   const [error, setError] = useState('');
   const [callingState, setCallingState] = useState(null);
   const [reactions, setReactions] = useState({});
+  const [typingUser, setTypingUser] = useState(null);
 
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
   const textInputRef = useRef(null);
+  const typingTimeoutRef = useRef(null);
+
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
 
   const scrollToBottom = (behavior = 'smooth') => {
     messagesEndRef.current?.scrollIntoView({ behavior });
@@ -48,10 +56,20 @@ export default function DirectConversationPage() {
 
   // Safe unique message appender that prevents duplicate messages
   const appendMessageUnique = (newMsg) => {
-    if (!newMsg || !newMsg._id) return;
+    if (!newMsg) return;
     setMessages((prev) => {
-      if (prev.some((m) => m._id === newMsg._id)) {
-        return prev; // already exists, skip
+      const exists = prev.some(
+        (m) =>
+          (m._id && newMsg._id && m._id === newMsg._id) ||
+          (m.clientTempId && newMsg.clientTempId && m.clientTempId === newMsg.clientTempId)
+      );
+      if (exists) {
+        return prev.map((m) =>
+          (m._id && newMsg._id && m._id === newMsg._id) ||
+          (m.clientTempId && newMsg.clientTempId && m.clientTempId === newMsg.clientTempId)
+            ? { ...m, ...newMsg }
+            : m
+        );
       }
       return [...prev, newMsg];
     });
@@ -73,12 +91,13 @@ export default function DirectConversationPage() {
       const conv = convsRes.data?.conversations?.find((c) => c._id === conversationId);
       if (conv) {
         setConversation(conv);
-        const other = conv.participants?.find((p) => p._id !== user?._id) || conv.participants?.[0];
+        const myId = (user?._id || user?.id)?.toString();
+        const other = conv.participants?.find((p) => (p._id || p.id)?.toString() !== myId) || conv.participants?.[0];
         if (other?.username) {
           api.get(`/users/${other.username}`)
             .then((res) => {
-              if (res.data?.success && res.data.user) {
-                setOtherProfile(res.data.user);
+              if (res.data?.success && res.data.profile) {
+                setOtherProfile(res.data.profile);
               }
             })
             .catch(() => {});
@@ -91,8 +110,11 @@ export default function DirectConversationPage() {
         setMessages(msgsRes.data.messages || []);
       }
 
-      // 3. Mark read
+      // 3. Mark read both via HTTP and socket
       await api.post(`/conversations/${conversationId}/read`).catch(() => {});
+      if (socket) {
+        socket.emit('mark_read', { conversationId, userId: user?._id || user?.id });
+      }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load conversation');
     } finally {
@@ -106,27 +128,99 @@ export default function DirectConversationPage() {
       fetchChat();
       if (socket) {
         socket.emit('join_conversation', conversationId);
+        socket.emit('mark_read', { conversationId, userId: user?._id || user?.id });
       }
     }
   }, [conversationId, socket]);
 
-  // Real-time socket listener with deduplication
+  // Real-time socket listeners (messages, sent confirmation, delivery, read receipts, typing)
   useEffect(() => {
-    if (!socket) return;
+    if (!socket || !conversationId) return;
 
     const handleNewMessage = (payload) => {
       if (payload.conversationId === conversationId && payload.message) {
         appendMessageUnique(payload.message);
         setTimeout(() => scrollToBottom('smooth'), 50);
         api.post(`/conversations/${conversationId}/read`).catch(() => {});
+        socket.emit('mark_read', { conversationId, userId: user?._id || user?.id });
       }
     };
 
+    const handleMessageSent = ({ conversationId: cId, message }) => {
+      if (cId === conversationId && message) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === message._id || (m.clientTempId && m.clientTempId === message.clientTempId)
+              ? { ...message, status: 'sent' }
+              : m
+          )
+        );
+      }
+    };
+
+    const handleMessageDelivered = ({ conversationId: cId, messageId, deliveredTo }) => {
+      if (cId === conversationId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m._id === messageId || !messageId) {
+              return {
+                ...m,
+                deliveredTo: deliveredTo || m.deliveredTo || []
+              };
+            }
+            return m;
+          })
+        );
+      }
+    };
+
+    const handleMessagesRead = ({ conversationId: cId, userId: readerId, readAt }) => {
+      if (cId === conversationId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            const senderId = (m.sender?._id || m.sender?.id || m.sender)?.toString();
+            const currentUserId = (user?._id || user?.id)?.toString();
+            if (senderId === currentUserId) {
+              const readBy = m.readBy || [];
+              if (!readBy.some((r) => (r.user?._id || r.user)?.toString() === readerId?.toString())) {
+                return {
+                  ...m,
+                  readBy: [...readBy, { user: readerId, readAt: readAt || new Date() }]
+                };
+              }
+            }
+            return m;
+          })
+        );
+      }
+    };
+
+    const handleTypingStart = ({ conversationId: cId, username }) => {
+      if (cId === conversationId) setTypingUser(username);
+    };
+
+    const handleTypingStop = ({ conversationId: cId }) => {
+      if (cId === conversationId) setTypingUser(null);
+    };
+
     socket.on('new_message', handleNewMessage);
+    socket.on('message:sent', handleMessageSent);
+    socket.on('message:delivered', handleMessageDelivered);
+    socket.on('messages_read', handleMessagesRead);
+    socket.on('message:receipt', handleMessagesRead);
+    socket.on('typing_start', handleTypingStart);
+    socket.on('typing_stop', handleTypingStop);
+
     return () => {
       socket.off('new_message', handleNewMessage);
+      socket.off('message:sent', handleMessageSent);
+      socket.off('message:delivered', handleMessageDelivered);
+      socket.off('messages_read', handleMessagesRead);
+      socket.off('message:receipt', handleMessagesRead);
+      socket.off('typing_start', handleTypingStart);
+      socket.off('typing_stop', handleTypingStop);
     };
-  }, [socket, conversationId]);
+  }, [socket, conversationId, user]);
 
   // Handle file attachment preview
   const handleFileChange = (e) => {
@@ -145,19 +239,76 @@ export default function DirectConversationPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const handleTextChange = (e) => {
+    const val = e.target.value;
+    setText(val);
+
+    if (!socket || !conversationId) return;
+
+    const currentUserId = (user?._id || user?.id)?.toString();
+    if (val.trim()) {
+      socket.emit('typing_start', {
+        conversationId,
+        userId: currentUserId,
+        username: user?.username
+      });
+
+      if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+      typingTimeoutRef.current = setTimeout(() => {
+        socket.emit('typing_stop', {
+          conversationId,
+          userId: currentUserId
+        });
+      }, 2000);
+    } else {
+      socket.emit('typing_stop', {
+        conversationId,
+        userId: currentUserId
+      });
+    }
+  };
+
   const handleSendMessage = async (e) => {
     if (e) e.preventDefault();
     if ((!text.trim() && !file) || sending) return;
+
+    const currentUserId = (user?._id || user?.id)?.toString();
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    if (socket && conversationId) {
+      socket.emit('typing_stop', { conversationId, userId: currentUserId });
+    }
 
     setSending(true);
     setError('');
 
     const textToSend = text.trim();
     const fileToSend = file;
+    const previewUrl = filePreview?.url;
+    const isVideo = filePreview?.isVideo;
 
-    // Reset input fields immediately for responsiveness
+    // Reset input fields immediately for instant responsiveness
     setText('');
     clearFile();
+
+    // Optimistic pending message with clientTempId
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const optimisticMsg = {
+      _id: tempId,
+      clientTempId: tempId,
+      status: 'sending',
+      conversation: conversationId,
+      sender: user,
+      text: textToSend,
+      mediaUrl: previewUrl || null,
+      mediaType: isVideo ? 'video' : (previewUrl ? 'image' : null),
+      createdAt: new Date().toISOString(),
+      sentAt: null,
+      deliveredTo: [],
+      readBy: []
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollToBottom('smooth'), 40);
 
     try {
       const formData = new FormData();
@@ -169,34 +320,118 @@ export default function DirectConversationPage() {
       });
 
       if (res.data?.success && res.data.message) {
-        // Append with deduplication (in case socket event arrived first)
-        appendMessageUnique(res.data.message);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === tempId || m.clientTempId === tempId
+              ? { ...res.data.message, status: 'sent' }
+              : m
+          )
+        );
         setTimeout(() => scrollToBottom('smooth'), 50);
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to send message');
-      // restore text if failed
-      setText(textToSend);
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === tempId || m.clientTempId === tempId
+            ? { ...m, status: 'failed' }
+            : m
+        )
+      );
     } finally {
       setSending(false);
       textInputRef.current?.focus();
     }
   };
 
+  // Safe retry for failed messages
+  const handleRetryMessage = async (failedMsg) => {
+    if (!failedMsg || sending) return;
+    setSending(true);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m._id === failedMsg._id || m.clientTempId === failedMsg.clientTempId
+          ? { ...m, status: 'sending' }
+          : m
+      )
+    );
+
+    try {
+      const formData = new FormData();
+      if (failedMsg.text) formData.append('text', failedMsg.text);
+
+      const res = await api.post(`/conversations/${conversationId}/messages`, formData);
+      if (res.data?.success && res.data.message) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === failedMsg._id || m.clientTempId === failedMsg.clientTempId
+              ? { ...res.data.message, status: 'sent' }
+              : m
+          )
+        );
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === failedMsg._id || m.clientTempId === failedMsg.clientTempId
+            ? { ...m, status: 'failed' }
+            : m
+        )
+      );
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Instant Heart reaction / sticker sender (just like Instagram's heart button)
   const handleSendHeart = async () => {
     if (sending) return;
+    const currentUserId = (user?._id || user?.id)?.toString();
+    if (socket && conversationId) {
+      socket.emit('typing_stop', { conversationId, userId: currentUserId });
+    }
     setSending(true);
+
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const optimisticMsg = {
+      _id: tempId,
+      clientTempId: tempId,
+      status: 'sending',
+      conversation: conversationId,
+      sender: user,
+      text: '❤️',
+      mediaUrl: null,
+      mediaType: null,
+      createdAt: new Date().toISOString(),
+      sentAt: null,
+      deliveredTo: [],
+      readBy: []
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollToBottom('smooth'), 40);
+
     try {
       const formData = new FormData();
       formData.append('text', '❤️');
       const res = await api.post(`/conversations/${conversationId}/messages`, formData);
       if (res.data?.success && res.data.message) {
-        appendMessageUnique(res.data.message);
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === tempId || m.clientTempId === tempId
+              ? { ...res.data.message, status: 'sent' }
+              : m
+          )
+        );
         setTimeout(() => scrollToBottom('smooth'), 50);
       }
     } catch (err) {
-      setError('Failed to send heart');
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === tempId || m.clientTempId === tempId
+            ? { ...m, status: 'failed' }
+            : m
+        )
+      );
     } finally {
       setSending(false);
     }
@@ -210,11 +445,63 @@ export default function DirectConversationPage() {
     }));
   };
 
+  const currentUserId = (user?._id || user?.id)?.toString();
+
   const otherParticipant = 
-    conversation?.participants?.find((p) => (p._id || p.id) !== (user?._id || user?.id)) || 
+    conversation?.participants?.find((p) => {
+      const pId = (p._id || p.id)?.toString();
+      return pId && currentUserId && pId !== currentUserId;
+    }) || 
     conversation?.participants?.[0];
 
   const profileToShow = otherProfile || otherParticipant;
+  const otherUserId = (profileToShow?._id || profileToShow?.id)?.toString();
+  const isOnline = Boolean(otherUserId && onlineUserIds?.has(otherUserId));
+  const lastActiveTime = (otherUserId && lastSeenMap?.[otherUserId]) || profileToShow?.lastActiveAt;
+
+  const formatActiveStatus = (online, lastActive) => {
+    if (online) return 'Active now';
+    if (!lastActive) return 'Active recently';
+    try {
+      const d = new Date(lastActive);
+      if (isNaN(d.getTime())) return 'Active recently';
+      const now = new Date();
+      const diffMs = Math.max(0, now.getTime() - d.getTime());
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) return 'Active just now';
+      if (diffMins < 60) return `Active ${diffMins}m ago`;
+      if (diffHours < 24) return `Active ${diffHours}h ago`;
+      if (diffDays === 1) return 'Active yesterday';
+      if (diffDays < 7) return `Active ${diffDays}d ago`;
+      return `Active ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+    } catch (e) {
+      return 'Active recently';
+    }
+  };
+
+  const activeStatusText = formatActiveStatus(isOnline, lastActiveTime);
+
+  const formatSeenTime = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      const diffMs = Math.max(0, now.getTime() - d.getTime());
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  };
 
   // Format date headers for Instagram style message grouping
   const formatTime = (dateStr) => {
@@ -250,16 +537,21 @@ export default function DirectConversationPage() {
               to={`/users/${profileToShow.username}`} 
               className="flex items-center gap-3 group"
             >
-              <div className="relative w-10 h-10 rounded-full bg-neutral-800 overflow-hidden shrink-0 border border-neutral-700/60">
+              <div className="relative w-10 h-10 rounded-full bg-neutral-800 shrink-0 border border-neutral-700/60">
                 {profileToShow.avatarUrl ? (
-                  <img src={profileToShow.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  <img src={profileToShow.avatarUrl} alt="" className="w-full h-full object-cover rounded-full" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center font-bold text-sm text-neutral-200">
+                  <div className="w-full h-full rounded-full flex items-center justify-center font-bold text-sm text-neutral-200">
                     {profileToShow.username?.[0]?.toUpperCase()}
                   </div>
                 )}
-                {/* Active indicator dot */}
-                <div className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black" />
+                {/* Active indicator dot - only shown when user is genuinely online */}
+                {isOnline && (
+                  <div 
+                    className="absolute bottom-0 right-0 w-3 h-3 bg-emerald-500 rounded-full border-2 border-black" 
+                    title="Active now"
+                  />
+                )}
               </div>
 
               <div className="flex flex-col">
@@ -271,8 +563,10 @@ export default function DirectConversationPage() {
                     <BadgeCheck className="w-4 h-4 text-sky-500 fill-sky-500" />
                   )}
                 </div>
-                <span className="text-[12px] text-neutral-400 font-normal leading-tight">
-                  Active now
+                <span className={`text-[12px] font-normal leading-tight transition-colors ${
+                  isOnline ? 'text-emerald-400 font-medium' : 'text-neutral-400'
+                }`}>
+                  {activeStatusText}
                 </span>
               </div>
             </Link>
@@ -520,17 +814,117 @@ export default function DirectConversationPage() {
                         )}
                       </div>
 
-                      {/* Seen indicator beneath last sent message */}
-                      {isMe && isLastMessage && (
-                        <div className="text-right mt-1 pr-1">
-                          <span className="text-[10px] text-neutral-400 font-medium">Seen</span>
-                        </div>
-                      )}
+                      {/* Full Status Lifecycle & Read Receipts */}
+                      {(() => {
+                        const isLastSentMessage = isMe && (
+                          idx === messages.length - 1 ||
+                          messages.slice(idx + 1).every((nextM) => {
+                            const nextSenderId = (nextM.sender?._id || nextM.sender?.id || nextM.sender)?.toString();
+                            return nextSenderId !== currentUserId;
+                          })
+                        );
+
+                        if (!isLastSentMessage) return null;
+
+                        // 1. Failed send state with Retry button
+                        if (m.status === 'failed') {
+                          return (
+                            <div className="flex items-center justify-end gap-1.5 mt-1 pr-1 text-right select-none animate-fadeIn">
+                              <span className="text-[11px] text-rose-500 font-medium">Failed to send.</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRetryMessage(m)}
+                                className="text-[11px] text-rose-400 font-semibold underline hover:text-rose-300 transition cursor-pointer"
+                              >
+                                Retry
+                              </button>
+                            </div>
+                          );
+                        }
+
+                        // 2. Sending... (pending server confirmation)
+                        if (m.status === 'sending') {
+                          return (
+                            <div className="flex items-center justify-end gap-1 mt-1 pr-1 text-right select-none animate-pulse">
+                              <span className="text-[11px] text-neutral-500 font-normal">Sending…</span>
+                            </div>
+                          );
+                        }
+
+                        // 3. Seen state: recipient has opened the conversation
+                        const recipientRead = m.readBy && m.readBy.find((r) => {
+                          const rId = (r.user?._id || r.user?.id || r.user)?.toString();
+                          return rId && otherUserId && rId === otherUserId;
+                        });
+
+                        if (recipientRead) {
+                          return (
+                            <div className="flex items-center justify-end gap-1.5 mt-1 pr-1 text-right select-none animate-fadeIn">
+                              <span className="text-[11px] text-neutral-400 font-normal">
+                                {recipientRead.readAt ? `Seen ${formatSeenTime(recipientRead.readAt)}` : 'Seen'}
+                              </span>
+                              {profileToShow?.avatarUrl ? (
+                                <img
+                                  src={profileToShow.avatarUrl}
+                                  alt=""
+                                  className="w-3.5 h-3.5 rounded-full object-cover border border-neutral-700 shrink-0"
+                                />
+                              ) : (
+                                <div className="w-3.5 h-3.5 rounded-full bg-neutral-700 flex items-center justify-center text-[8px] text-white shrink-0">
+                                  {profileToShow?.username?.[0]?.toUpperCase()}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        }
+
+                        // 4. Delivered state: recipient client received message
+                        const isDelivered = m.deliveredTo && m.deliveredTo.some((d) => {
+                          const dId = (d.user?._id || d.user?.id || d.user)?.toString();
+                          return dId && otherUserId && dId === otherUserId;
+                        });
+
+                        if (isDelivered) {
+                          return (
+                            <div className="flex items-center justify-end gap-1 mt-1 pr-1 text-right select-none animate-fadeIn">
+                              <span className="text-[11px] text-neutral-500 font-normal">Delivered</span>
+                            </div>
+                          );
+                        }
+
+                        // 5. Sent state: durably saved on server
+                        return (
+                          <div className="flex items-center justify-end gap-1 mt-1 pr-1 text-right select-none">
+                            <span className="text-[11px] text-neutral-500 font-normal">Sent</span>
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                 </React.Fragment>
               );
             })}
+
+            {/* Instagram Typing Indicator Triple-bounce Bubble */}
+            {typingUser && (
+              <div className="flex items-end gap-2 mt-2 mb-1 pl-1 animate-fadeIn select-none">
+                <div className="w-7 h-7 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700 shrink-0 mb-0.5">
+                  {profileToShow?.avatarUrl ? (
+                    <img src={profileToShow.avatarUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center font-bold text-[10px] text-white">
+                      {profileToShow?.username?.[0]?.toUpperCase()}
+                    </div>
+                  )}
+                </div>
+                <div className="bg-[#262626] px-4 py-2.5 rounded-[18px] rounded-bl-[4px] flex items-center gap-1.5 shadow-sm">
+                  <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                  <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                  <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" />
+                </div>
+              </div>
+            )}
+
             <div ref={messagesEndRef} />
           </>
         )}
@@ -586,7 +980,7 @@ export default function DirectConversationPage() {
             ref={textInputRef}
             type="text"
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={handleTextChange}
             placeholder="Message..."
             className="flex-1 bg-transparent border-none text-white text-[14px] placeholder:text-neutral-500 focus:outline-none min-w-0 py-1"
           />

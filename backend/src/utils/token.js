@@ -11,13 +11,19 @@ export const verifyToken = (token) => {
   return jwt.verify(token, env.JWT_SECRET);
 };
 
-export const getCookieOptions = () => ({
-  httpOnly: true,
-  secure: env.NODE_ENV === 'production',
-  sameSite: 'lax', // Supports top-level cross-site GET navigations while preventing CSRF on mutating requests
-  path: '/',
-  maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
-});
+export const getCookieOptions = () => {
+  const isProd = env.NODE_ENV === 'production';
+  const sameSite = env.COOKIE_SAMESITE || (isProd ? 'none' : 'lax');
+  const secure = env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE : (isProd || sameSite === 'none');
+
+  return {
+    httpOnly: true,
+    secure,
+    sameSite,
+    path: '/',
+    maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days in milliseconds
+  };
+};
 
 export const setAuthCookie = (res, token) => {
   res.cookie('token', token, getCookieOptions());

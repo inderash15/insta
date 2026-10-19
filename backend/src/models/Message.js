@@ -28,6 +28,22 @@ const messageSchema = new mongoose.Schema(
       enum: ['image', 'video', null],
       default: null
     },
+    sentAt: {
+      type: Date,
+      default: Date.now
+    },
+    deliveredTo: [
+      {
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: 'User'
+        },
+        deliveredAt: {
+          type: Date,
+          default: Date.now
+        }
+      }
+    ],
     readBy: [
       {
         user: {

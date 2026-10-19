@@ -20,7 +20,7 @@ import DirectNav from '../../components/messages/DirectNav';
 
 export default function MessagesPage() {
   const { user } = useAuth();
-  const { socket, onlineUserIds, setUnreadMessages } = useSocket();
+  const { socket, onlineUserIds, lastSeenMap, setUnreadMessages } = useSocket();
   const [conversations, setConversations] = useState([]);
   const [activeConv, setActiveConv] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -33,6 +33,55 @@ export default function MessagesPage() {
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setTick((t) => t + 1), 30000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Format active status just like Instagram
+  const formatActiveStatus = (online, lastActive) => {
+    if (online) return 'Active now';
+    if (!lastActive) return 'Active recently';
+    try {
+      const d = new Date(lastActive);
+      if (isNaN(d.getTime())) return 'Active recently';
+      const now = new Date();
+      const diffMs = Math.max(0, now.getTime() - d.getTime());
+      const diffSecs = Math.floor(diffMs / 1000);
+      const diffMins = Math.floor(diffSecs / 60);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) return 'Active just now';
+      if (diffMins < 60) return `Active ${diffMins}m ago`;
+      if (diffHours < 24) return `Active ${diffHours}h ago`;
+      if (diffDays === 1) return 'Active yesterday';
+      if (diffDays < 7) return `Active ${diffDays}d ago`;
+      return `Active ${d.toLocaleDateString([], { month: 'short', day: 'numeric' })}`;
+    } catch (e) {
+      return 'Active recently';
+    }
+  };
+
+  const formatSeenTime = (dateStr) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return '';
+      const now = new Date();
+      const diffMs = Math.max(0, now.getTime() - d.getTime());
+      const diffMins = Math.floor(diffMs / 60000);
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      const diffHours = Math.floor(diffMins / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      return d.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+    } catch (e) {
+      return '';
+    }
+  };
 
   // Fetch all conversations
   const fetchConversations = async () => {
@@ -77,6 +126,7 @@ export default function MessagesPage() {
     fetchMessages(conv._id);
     if (socket) {
       socket.emit('join_conversation', conv._id);
+      socket.emit('mark_read', { conversationId: conv._id, userId: user?._id || user?.id });
     }
   };
 
@@ -91,6 +141,7 @@ export default function MessagesPage() {
           return [...prev, message];
         });
         api.post(`/conversations/${conversationId}/read`).catch(() => {});
+        socket.emit('mark_read', { conversationId, userId: user?._id || user?.id });
       }
 
       // Update conversations list snippet
@@ -113,6 +164,55 @@ export default function MessagesPage() {
       });
     };
 
+    const handleMessageSent = ({ conversationId: cId, message }) => {
+      if (activeConv && activeConv._id === cId && message) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === message._id || (m.clientTempId && m.clientTempId === message.clientTempId)
+              ? { ...message, status: 'sent' }
+              : m
+          )
+        );
+      }
+    };
+
+    const handleMessageDelivered = ({ conversationId: cId, messageId, deliveredTo }) => {
+      if (activeConv && activeConv._id === cId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            if (m._id === messageId || !messageId) {
+              return {
+                ...m,
+                deliveredTo: deliveredTo || m.deliveredTo || []
+              };
+            }
+            return m;
+          })
+        );
+      }
+    };
+
+    const handleMessagesRead = ({ conversationId, userId: readerId, readAt }) => {
+      if (activeConv && activeConv._id === conversationId) {
+        setMessages((prev) =>
+          prev.map((m) => {
+            const senderId = (m.sender?._id || m.sender?.id || m.sender)?.toString();
+            const currentUserId = (user?._id || user?.id)?.toString();
+            if (senderId === currentUserId) {
+              const readBy = m.readBy || [];
+              if (!readBy.some((r) => (r.user?._id || r.user)?.toString() === readerId?.toString())) {
+                return {
+                  ...m,
+                  readBy: [...readBy, { user: readerId, readAt: readAt || new Date() }]
+                };
+              }
+            }
+            return m;
+          })
+        );
+      }
+    };
+
     const handleTypingStart = ({ conversationId, username }) => {
       if (activeConv && activeConv._id === conversationId) {
         setTypingUser(username);
@@ -126,15 +226,23 @@ export default function MessagesPage() {
     };
 
     socket.on('new_message', handleNewMessage);
+    socket.on('message:sent', handleMessageSent);
+    socket.on('message:delivered', handleMessageDelivered);
+    socket.on('messages_read', handleMessagesRead);
+    socket.on('message:receipt', handleMessagesRead);
     socket.on('typing_start', handleTypingStart);
     socket.on('typing_stop', handleTypingStop);
 
     return () => {
       socket.off('new_message', handleNewMessage);
+      socket.off('message:sent', handleMessageSent);
+      socket.off('message:delivered', handleMessageDelivered);
+      socket.off('messages_read', handleMessagesRead);
+      socket.off('message:receipt', handleMessagesRead);
       socket.off('typing_start', handleTypingStart);
       socket.off('typing_stop', handleTypingStop);
     };
-  }, [socket, activeConv]);
+  }, [socket, activeConv, user]);
 
   // Auto scroll to bottom of messages
   useEffect(() => {
@@ -161,7 +269,7 @@ export default function MessagesPage() {
     }, 1500);
   };
 
-  // Send message
+  // Send message with optimistic pending state
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!messageText.trim() || !activeConv) return;
@@ -176,18 +284,80 @@ export default function MessagesPage() {
       });
     }
 
+    const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
+    const optimisticMsg = {
+      _id: tempId,
+      clientTempId: tempId,
+      status: 'sending',
+      conversation: activeConv._id,
+      sender: user,
+      text: textToSend,
+      mediaUrl: null,
+      mediaType: null,
+      createdAt: new Date().toISOString(),
+      sentAt: null,
+      deliveredTo: [],
+      readBy: []
+    };
+
+    setMessages((prev) => [...prev, optimisticMsg]);
+
     try {
       const res = await api.post(`/conversations/${activeConv._id}/messages`, {
         text: textToSend
       });
       if (res.data?.success && res.data.message) {
-        setMessages((prev) => {
-          if (prev.some((m) => m._id === res.data.message._id)) return prev;
-          return [...prev, res.data.message];
-        });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === tempId || m.clientTempId === tempId
+              ? { ...res.data.message, status: 'sent' }
+              : m
+          )
+        );
       }
     } catch (err) {
-      alert(err.message || 'Failed to send message');
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === tempId || m.clientTempId === tempId
+            ? { ...m, status: 'failed' }
+            : m
+        )
+      );
+    }
+  };
+
+  // Retry sending failed message
+  const handleRetryMessage = async (failedMsg) => {
+    if (!failedMsg || !activeConv) return;
+    setMessages((prev) =>
+      prev.map((m) =>
+        m._id === failedMsg._id || m.clientTempId === failedMsg.clientTempId
+          ? { ...m, status: 'sending' }
+          : m
+      )
+    );
+
+    try {
+      const res = await api.post(`/conversations/${activeConv._id}/messages`, {
+        text: failedMsg.text
+      });
+      if (res.data?.success && res.data.message) {
+        setMessages((prev) =>
+          prev.map((m) =>
+            m._id === failedMsg._id || m.clientTempId === failedMsg.clientTempId
+              ? { ...res.data.message, status: 'sent' }
+              : m
+          )
+        );
+      }
+    } catch (err) {
+      setMessages((prev) =>
+        prev.map((m) =>
+          m._id === failedMsg._id || m.clientTempId === failedMsg.clientTempId
+            ? { ...m, status: 'failed' }
+            : m
+        )
+      );
     }
   };
 
@@ -349,7 +519,11 @@ export default function MessagesPage() {
               {/* Active Chat Header */}
               {(() => {
                 const recipient = getRecipient(activeConv);
-                const isOnline = recipient && onlineUserIds.has(recipient._id?.toString() || recipient.id?.toString());
+                const recipientId = recipient ? (recipient._id || recipient.id)?.toString() : null;
+                const isOnline = Boolean(recipientId && onlineUserIds?.has(recipientId));
+                const lastActiveTime = (recipientId && lastSeenMap?.[recipientId]) || recipient?.lastActiveAt;
+                const activeStatusText = formatActiveStatus(isOnline, lastActiveTime);
+
                 return (
                   <div className="p-3.5 border-b border-neutral-800 flex items-center justify-between bg-neutral-900/40">
                     <div className="flex items-center gap-3">
@@ -374,10 +548,12 @@ export default function MessagesPage() {
                       <div>
                         <p className="text-xs font-bold text-neutral-100 flex items-center gap-1">
                           <span>{recipient?.username}</span>
-                          {recipient?.isVerified && <span className="text-blue-400 text-[10px]">✓</span>}
+                          {recipient?.isVerified && <span className="text-sky-400 text-[10px]">✓</span>}
                         </p>
-                        <p className="text-[10px] text-neutral-400">
-                          {isOnline ? 'Active now' : 'Offline'}
+                        <p className={`text-[10px] font-normal transition-colors ${
+                          isOnline ? 'text-emerald-400 font-medium' : 'text-neutral-400'
+                        }`}>
+                          {activeStatusText}
                         </p>
                       </div>
                     </div>
@@ -393,18 +569,21 @@ export default function MessagesPage() {
                   </div>
                 ) : (
                   messages.map((m, idx) => {
-                    const currentUserId = user?._id || user?.id;
-                    const senderId = m.sender?._id || m.sender?.id || m.sender;
+                    const currentUserId = (user?._id || user?.id)?.toString();
+                    const senderId = (m.sender?._id || m.sender?.id || m.sender)?.toString();
                     const isSelf = senderId === currentUserId;
 
                     const prevMsg = messages[idx - 1];
                     const nextMsg = messages[idx + 1];
 
-                    const prevSender = prevMsg ? (prevMsg.sender?._id || prevMsg.sender?.id || prevMsg.sender) : null;
-                    const nextSender = nextMsg ? (nextMsg.sender?._id || nextMsg.sender?.id || nextMsg.sender) : null;
+                    const prevSender = prevMsg ? (prevMsg.sender?._id || prevMsg.sender?.id || prevMsg.sender)?.toString() : null;
+                    const nextSender = nextMsg ? (nextMsg.sender?._id || nextMsg.sender?.id || nextMsg.sender)?.toString() : null;
 
                     const isSameSenderAsPrev = prevSender === senderId;
                     const isSameSenderAsNext = nextSender === senderId;
+
+                    const recipient = getRecipient(activeConv);
+                    const otherUserId = recipient ? (recipient._id || recipient.id)?.toString() : null;
 
                     return (
                       <div
@@ -429,17 +608,115 @@ export default function MessagesPage() {
                             )}
                             <p className={`${m.text === '❤️' ? 'text-2xl py-0.5' : ''}`}>{m.text}</p>
                           </div>
+
+                          {/* Full Status Lifecycle & Read Receipts */}
+                          {(() => {
+                            const isLastSentMessage = isSelf && (
+                              idx === messages.length - 1 ||
+                              messages.slice(idx + 1).every((nextM) => {
+                                const nextSenderId = (nextM.sender?._id || nextM.sender?.id || nextM.sender)?.toString();
+                                return nextSenderId !== currentUserId;
+                              })
+                            );
+
+                            if (!isLastSentMessage) return null;
+
+                            // 1. Failed send state with Retry button
+                            if (m.status === 'failed') {
+                              return (
+                                <div className="flex items-center justify-end gap-1.5 mt-1 pr-1 text-right select-none animate-fadeIn">
+                                  <span className="text-[11px] text-rose-500 font-medium">Failed to send.</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => handleRetryMessage(m)}
+                                    className="text-[11px] text-rose-400 font-semibold underline hover:text-rose-300 transition cursor-pointer"
+                                  >
+                                    Retry
+                                  </button>
+                                </div>
+                              );
+                            }
+
+                            // 2. Sending... (pending server confirmation)
+                            if (m.status === 'sending') {
+                              return (
+                                <div className="flex items-center justify-end gap-1 mt-1 pr-1 text-right select-none animate-pulse">
+                                  <span className="text-[11px] text-neutral-500 font-normal">Sending…</span>
+                                </div>
+                              );
+                            }
+
+                            // 3. Seen state: recipient opened conversation
+                            const recipientRead = m.readBy && m.readBy.find((r) => {
+                              const rId = (r.user?._id || r.user?.id || r.user)?.toString();
+                              return rId && otherUserId && rId === otherUserId;
+                            });
+
+                            if (recipientRead) {
+                              return (
+                                <div className="flex items-center justify-end gap-1.5 mt-1 pr-1 text-right select-none animate-fadeIn">
+                                  <span className="text-[11px] text-neutral-400 font-normal">
+                                    {recipientRead.readAt ? `Seen ${formatSeenTime(recipientRead.readAt)}` : 'Seen'}
+                                  </span>
+                                  {recipient?.avatarUrl ? (
+                                    <img
+                                      src={recipient.avatarUrl}
+                                      alt=""
+                                      className="w-3.5 h-3.5 rounded-full object-cover border border-neutral-700 shrink-0"
+                                    />
+                                  ) : (
+                                    <div className="w-3.5 h-3.5 rounded-full bg-neutral-700 flex items-center justify-center text-[8px] text-white shrink-0">
+                                      {recipient?.username?.[0]?.toUpperCase()}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            // 4. Delivered state: recipient client received message
+                            const isDelivered = m.deliveredTo && m.deliveredTo.some((d) => {
+                              const dId = (d.user?._id || d.user?.id || d.user)?.toString();
+                              return dId && otherUserId && dId === otherUserId;
+                            });
+
+                            if (isDelivered) {
+                              return (
+                                <div className="flex items-center justify-end gap-1 mt-1 pr-1 text-right select-none animate-fadeIn">
+                                  <span className="text-[11px] text-neutral-500 font-normal">Delivered</span>
+                                </div>
+                              );
+                            }
+
+                            // 5. Sent state: durably saved on server
+                            return (
+                              <div className="flex items-center justify-end gap-1 mt-1 pr-1 text-right select-none">
+                                <span className="text-[11px] text-neutral-500 font-normal">Sent</span>
+                              </div>
+                            );
+                          })()}
                         </div>
                       </div>
                     );
                   })
                 )}
 
-                {/* Typing indicator */}
+                {/* Typing indicator bubble */}
                 {typingUser && (
-                  <div className="text-[11px] text-neutral-400 italic flex items-center gap-1.5 pl-2 py-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-bounce" />
-                    <span>{typingUser} is typing...</span>
+                  <div className="flex items-end gap-2 mt-2 pl-1 animate-fadeIn select-none">
+                    <div className="w-7 h-7 rounded-full bg-neutral-800 overflow-hidden border border-neutral-700 shrink-0 mb-0.5">
+                      {getRecipient(activeConv)?.avatarUrl ? (
+                        <img src={getRecipient(activeConv).avatarUrl} alt="" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center font-bold text-[10px] text-white">
+                          {getRecipient(activeConv)?.username?.[0]?.toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="bg-[#262626] px-4 py-2.5 rounded-[18px] rounded-bl-[4px] flex items-center gap-1.5 shadow-sm">
+                      <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.3s]" />
+                      <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce [animation-delay:-0.15s]" />
+                      <span className="w-1.5 h-1.5 bg-neutral-400 rounded-full animate-bounce" />
+                    </div>
                   </div>
                 )}
                 <div ref={messagesEndRef} />
