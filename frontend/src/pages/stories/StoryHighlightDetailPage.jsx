@@ -7,12 +7,16 @@ export default function StoryHighlightDetailPage() {
   const navigate = useNavigate();
 
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [highlights] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('insta_user_highlights') || '[]');
+    } catch {
+      return [];
+    }
+  });
 
-  const stories = [
-    { id: '1', mediaUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=800', title: 'Beach Villa Sunset' },
-    { id: '2', mediaUrl: 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=800', title: 'Mountain Trail' },
-    { id: '3', mediaUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', title: 'Art Museum' }
-  ];
+  const currentHighlight = highlights.find((h) => h._id === highlightId);
+  const stories = currentHighlight?.stories || [];
 
   const handleNext = () => {
     if (currentIndex < stories.length - 1) {
@@ -27,6 +31,24 @@ export default function StoryHighlightDetailPage() {
       setCurrentIndex((prev) => prev - 1);
     }
   };
+
+  if (stories.length === 0) {
+    return (
+      <div className="relative w-full h-screen max-w-sm mx-auto flex flex-col justify-center items-center bg-black p-6 text-center space-y-4">
+        <Sparkles className="w-8 h-8 text-pink-500 mx-auto" />
+        <h2 className="text-sm font-bold text-white">No Stories in Highlight</h2>
+        <p className="text-xs text-neutral-400">
+          This highlight does not contain any active stories yet.
+        </p>
+        <button
+          onClick={() => navigate('/stories/highlights')}
+          className="px-4 py-2 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-semibold text-white"
+        >
+          Back to Highlights
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full h-screen max-w-sm mx-auto flex flex-col justify-between bg-black overflow-hidden shadow-2xl selection:bg-pink-500/30">

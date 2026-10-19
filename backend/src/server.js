@@ -14,7 +14,9 @@ initSocket(server);
 const startServer = async () => {
   try {
     await connectDB();
-    await seedDatabaseIfEmpty();
+    if (process.env.SEED_MOCK_DATA === 'true') {
+      await seedDatabaseIfEmpty();
+    }
     server.listen(env.PORT, () => {
 
       console.log(`[Server] Insta backend listening on port ${env.PORT} in ${env.NODE_ENV} mode`);

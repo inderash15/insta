@@ -475,3 +475,26 @@ export const getUserPosts = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/posts/:id/likers
+export const getPostLikers = async (req, res, next) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    const likes = await Like.find({
+      targetType: 'post',
+      targetId: post._id
+    })
+      .populate('user', 'username fullName avatarUrl isVerified isPrivate')
+      .sort({ createdAt: -1 })
+      .limit(50);
+
+    const likers = likes.map((l) => l.user).filter(Boolean);
+    return res.status(200).json({ success: true, likers });
+  } catch (err) {
+    next(err);
+  }
+};

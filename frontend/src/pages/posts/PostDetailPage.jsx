@@ -285,7 +285,7 @@ export default function PostDetailPage() {
         {/* Media */}
         <div className="aspect-square bg-neutral-900 flex items-center justify-center">
           <img
-            src={post.media?.[0]?.url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800'}
+            src={post.media?.[0]?.url || ''}
             alt=""
             className="w-full h-full object-cover"
           />

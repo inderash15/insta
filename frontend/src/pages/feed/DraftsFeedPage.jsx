@@ -20,30 +20,18 @@ export default function DraftsFeedPage() {
     localStorage.setItem('insta_post_drafts', JSON.stringify(updated));
   };
 
-  const handleCreateSampleDraft = () => {
-    const newDraft = {
-      id: Date.now().toString(),
-      caption: 'Sunset reflections over the Pacific skyline 🌅 #wanderlust #sunset',
-      mediaUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=600',
-      createdAt: new Date().toISOString()
-    };
-    const updated = [newDraft, ...drafts];
-    setDrafts(updated);
-    localStorage.setItem('insta_post_drafts', JSON.stringify(updated));
-  };
-
   return (
     <div className="w-full max-w-xl mx-auto py-4 px-2 sm:px-4 space-y-4">
       <FeedTabNav />
 
       <div className="flex items-center justify-between pb-2">
         <h2 className="text-sm font-bold text-white">Your Post Drafts</h2>
-        <button
-          onClick={handleCreateSampleDraft}
+        <Link
+          to="/create/post"
           className="text-xs text-pink-400 hover:text-pink-300 font-semibold transition"
         >
-          + Save Current Draft
-        </button>
+          + New Post
+        </Link>
       </div>
 
       {drafts.length === 0 ? (

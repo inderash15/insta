@@ -16,20 +16,15 @@ export default function StoryViewersPage() {
     async function loadViewers() {
       try {
         setLoading(true);
-        if (storyId && storyId !== 'sample') {
+        if (storyId) {
           const res = await api.get(`/stories/${storyId}/viewers`);
           if (res.data?.success) {
             setViewers(res.data.viewers || []);
             setReactions(res.data.reactions || []);
           }
-        } else {
-          setViewers([
-            { user: { _id: '1', username: 'maya', fullName: 'Maya Lin', avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150' }, viewedAt: new Date() },
-            { user: { _id: '2', username: 'alex', fullName: 'Alex Rivera', avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' }, viewedAt: new Date() }
-          ]);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Failed to load story viewers:', err.message);
       } finally {
         setLoading(false);
       }

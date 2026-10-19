@@ -26,22 +26,9 @@ export default function StoryViewerPage() {
             // Record view
             api.post(`/stories/${storyId}/view`).catch(() => {});
           }
-        } else {
-          // Fallback sample story if opened from empty tray
-          setStory({
-            _id: 'sample',
-            mediaUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800',
-            author: { username: 'alex', fullName: 'Alex Rivera' },
-            createdAt: new Date()
-          });
         }
       } catch (err) {
-        setStory({
-          _id: storyId,
-          mediaUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800',
-          author: { username: 'maya', fullName: 'Maya Lin' },
-          createdAt: new Date()
-        });
+        console.error('Failed to load story:', err.message);
       } finally {
         setLoading(false);
       }
@@ -144,12 +131,19 @@ export default function StoryViewerPage() {
       </div>
 
       {/* Main Story Canvas */}
-      <div className="w-full h-full">
-        <img
-          src={story?.mediaUrl || 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=800'}
-          alt=""
-          className="w-full h-full object-cover"
-        />
+      <div className="w-full h-full flex items-center justify-center bg-black">
+        {story?.mediaUrl ? (
+          <img
+            src={story.mediaUrl}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="text-center p-6 space-y-2 text-neutral-400 text-xs">
+            <p className="font-semibold text-white">Story unavailable</p>
+            <p>This story has expired or was removed by its creator.</p>
+          </div>
+        )}
       </div>
 
       {/* Reaction Feedback Float */}

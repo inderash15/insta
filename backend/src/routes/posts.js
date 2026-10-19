@@ -10,7 +10,8 @@ import {
   addComment,
   getComments,
   deleteComment,
-  getUserPosts
+  getUserPosts,
+  getPostLikers
 } from '../controllers/postController.js';
 import { requireAuth, optionalAuth } from '../middleware/authGuard.js';
 import { uploadPostMedia } from '../middleware/upload.js';
@@ -25,6 +26,8 @@ router.get('/:id', optionalAuth, getPost);
 router.delete('/:id', requireAuth, deletePost);
 
 // Likes and bookmarks
+router.get('/:id/likers', optionalAuth, getPostLikers);
+router.get('/:id/likes', optionalAuth, getPostLikers);
 router.post('/:id/like', requireAuth, toggleLike);
 router.post('/:id/bookmark', requireAuth, toggleBookmark);
 router.post('/:id/save', requireAuth, toggleBookmark);

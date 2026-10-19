@@ -5,7 +5,16 @@ const commentSchema = new mongoose.Schema(
     post: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Post',
-      required: true,
+      required: false,
+      index: true
+    },
+    targetType: {
+      type: String,
+      enum: ['post', 'reel'],
+      default: 'post'
+    },
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
       index: true
     },
     author: {
@@ -36,5 +45,6 @@ const commentSchema = new mongoose.Schema(
 );
 
 commentSchema.index({ post: 1, createdAt: 1 });
+commentSchema.index({ targetType: 1, targetId: 1, createdAt: 1 });
 
 export const Comment = mongoose.model('Comment', commentSchema);

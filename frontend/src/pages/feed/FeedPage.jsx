@@ -45,9 +45,9 @@ export default function FeedPage() {
 
   const fetchSuggestions = async () => {
     try {
-      const res = await api.get('/search/users?q=a');
+      const res = await api.get('/explore/people?limit=5');
       if (res.data?.users) {
-        setSuggestions(res.data.users.slice(0, 5));
+        setSuggestions(res.data.users);
       }
     } catch {}
   };

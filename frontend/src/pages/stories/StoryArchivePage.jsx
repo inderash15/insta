@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../../services/api';
+import { useAuth } from '../../context/AuthContext';
 import PageHeader from '../../components/common/PageHeader';
 import LoadingSkeleton from '../../components/common/LoadingSkeleton';
 import EmptyState from '../../components/common/EmptyState';
 import { Archive, Plus, Sparkles } from 'lucide-react';
 
 export default function StoryArchivePage() {
+  const { user } = useAuth();
   const [archivedStories, setArchivedStories] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -14,20 +16,23 @@ export default function StoryArchivePage() {
     async function loadArchive() {
       try {
         setLoading(true);
-        // Load past stories
-        setArchivedStories([
-          { _id: 'arc1', mediaUrl: 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=500', date: 'Yesterday' },
-          { _id: 'arc2', mediaUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=500', date: '3 days ago' },
-          { _id: 'arc3', mediaUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=500', date: 'Last week' }
-        ]);
+        const res = await api.get('/stories/feed');
+        if (res.data?.success && user) {
+          const uId = user._id || user.id;
+          const myGroup = (res.data.tray || []).find((g) => (g.author?._id || g.user?._id) === uId);
+          setArchivedStories(myGroup?.stories || []);
+        } else {
+          setArchivedStories([]);
+        }
       } catch (err) {
-        console.error(err);
+        console.error('Failed to load archived stories:', err.message);
+        setArchivedStories([]);
       } finally {
         setLoading(false);
       }
     }
     loadArchive();
-  }, []);
+  }, [user]);
 
   return (
     <div className="max-w-4xl mx-auto py-6 px-4 space-y-6 text-neutral-100">

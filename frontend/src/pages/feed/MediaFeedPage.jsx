@@ -50,7 +50,7 @@ export default function MediaFeedPage() {
               className="relative aspect-square group overflow-hidden rounded-2xl bg-neutral-900 border border-neutral-800/80 shadow-sm"
             >
               <img
-                src={post.media?.[0]?.url || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500'}
+                src={post.media?.[0]?.url || ''}
                 alt=""
                 className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
               />

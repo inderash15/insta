@@ -6,11 +6,13 @@ import EmptyState from '../../components/common/EmptyState';
 import { Sparkles, Plus, Play } from 'lucide-react';
 
 export default function StoryHighlightsPage() {
-  const [highlights, setHighlights] = useState([
-    { _id: 'hl1', title: 'Travel ✈️', coverUrl: 'https://images.unsplash.com/photo-1507525428034-b723cf961d3e?w=200', count: 8 },
-    { _id: 'hl2', title: 'Design 🎨', coverUrl: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200', count: 14 },
-    { _id: 'hl3', title: 'Life ☕', coverUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200', count: 5 }
-  ]);
+  const [highlights, setHighlights] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('insta_user_highlights') || '[]');
+    } catch {
+      return [];
+    }
+  });
   const [showModal, setShowModal] = useState(false);
   const [newTitle, setNewTitle] = useState('');
 
@@ -20,10 +22,14 @@ export default function StoryHighlightsPage() {
     const newHl = {
       _id: Date.now().toString(),
       title: newTitle.trim(),
-      coverUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=200',
-      count: 1
+      coverUrl: '',
+      count: 0
     };
-    setHighlights((prev) => [newHl, ...prev]);
+    const updated = [newHl, ...highlights];
+    setHighlights(updated);
+    try {
+      localStorage.setItem('insta_user_highlights', JSON.stringify(updated));
+    } catch {}
     setNewTitle('');
     setShowModal(false);
   };
@@ -79,25 +85,37 @@ export default function StoryHighlightsPage() {
         </div>
       )}
 
-      <div className="grid grid-cols-3 gap-4">
-        {highlights.map((hl) => (
-          <Link
-            key={hl._id}
-            to={`/stories/highlights/${hl._id}`}
-            className="flex flex-col items-center gap-2 group text-center"
-          >
-            <div className="w-20 h-20 rounded-full p-0.5 border-2 border-neutral-700 group-hover:border-pink-500 transition">
-              <div className="w-full h-full rounded-full overflow-hidden bg-neutral-800">
-                <img src={hl.coverUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+      {highlights.length === 0 ? (
+        <EmptyState
+          icon={Sparkles}
+          title="No highlights yet"
+          description="Keep your favorite stories on your profile permanently by creating a highlight."
+        />
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {highlights.map((hl) => (
+            <Link
+              key={hl._id}
+              to={`/stories/highlights/${hl._id}`}
+              className="flex flex-col items-center gap-2 group text-center"
+            >
+              <div className="w-20 h-20 rounded-full p-0.5 border-2 border-neutral-700 group-hover:border-pink-500 transition">
+                <div className="w-full h-full rounded-full overflow-hidden bg-neutral-800 flex items-center justify-center">
+                  {hl.coverUrl ? (
+                    <img src={hl.coverUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition" />
+                  ) : (
+                    <Sparkles className="w-6 h-6 text-pink-400" />
+                  )}
+                </div>
               </div>
-            </div>
-            <div>
-              <p className="text-xs font-semibold text-white group-hover:text-pink-400 transition">{hl.title}</p>
-              <p className="text-[10px] text-neutral-500">{hl.count} stories</p>
-            </div>
-          </Link>
-        ))}
-      </div>
+              <div>
+                <p className="text-xs font-semibold text-white group-hover:text-pink-400 transition">{hl.title}</p>
+                <p className="text-[10px] text-neutral-500">{hl.count} stories</p>
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

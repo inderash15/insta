@@ -20,9 +20,15 @@ export default function ReelCommentsPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await api.get(`/reels/${reelId}`);
-      if (res.data?.success) {
-        setReel(res.data.reel);
+      const [reelRes, commentsRes] = await Promise.all([
+        api.get(`/reels/${reelId}`),
+        api.get(`/reels/${reelId}/comments`).catch(() => ({ data: { comments: [] } }))
+      ]);
+      if (reelRes.data?.success) {
+        setReel(reelRes.data.reel);
+      }
+      if (commentsRes.data?.comments) {
+        setComments(commentsRes.data.comments);
       }
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to load comments');
@@ -37,25 +43,22 @@ export default function ReelCommentsPage() {
     }
   }, [reelId]);
 
-  const handleAddComment = (e) => {
+  const handleAddComment = async (e) => {
     e.preventDefault();
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || submitting) return;
 
-    setSubmitting(true);
-    const mockComment = {
-      _id: Date.now().toString(),
-      text: newComment.trim(),
-      author: {
-        _id: user?._id,
-        username: user?.username || 'You',
-        avatarUrl: user?.avatarUrl
-      },
-      createdAt: new Date().toISOString()
-    };
-
-    setComments((prev) => [mockComment, ...prev]);
-    setNewComment('');
-    setSubmitting(false);
+    try {
+      setSubmitting(true);
+      const res = await api.post(`/reels/${reelId}/comments`, { text: newComment.trim() });
+      if (res.data?.success && res.data.comment) {
+        setComments((prev) => [res.data.comment, ...prev]);
+        setNewComment('');
+      }
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to post comment');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (

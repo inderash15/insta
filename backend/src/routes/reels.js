@@ -7,7 +7,9 @@ import {
   getReelById,
   viewReel,
   toggleLikeReel,
-  deleteReel
+  deleteReel,
+  getReelComments,
+  addReelComment
 } from '../controllers/reelController.js';
 
 const router = express.Router();
@@ -17,6 +19,8 @@ router.post('/', requireAuth, uploadReelMedia, createReel);
 router.get('/:id', optionalAuth, getReelById);
 router.post('/:id/view', optionalAuth, viewReel);
 router.post('/:id/like', requireAuth, toggleLikeReel);
+router.get('/:id/comments', optionalAuth, getReelComments);
+router.post('/:id/comments', requireAuth, addReelComment);
 router.delete('/:id', requireAuth, deleteReel);
 
 export default router;

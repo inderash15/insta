@@ -10,9 +10,9 @@ export default function PostPreviewPage() {
   const { user } = useAuth();
 
   const previewData = location.state || {};
-  const mediaUrl = previewData.preview || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600';
-  const caption = previewData.caption || 'Preview caption with aesthetic lifestyle details and tags #insta #demo';
-  const tags = previewData.hashtags ? previewData.hashtags.split(',').map((t) => t.trim()) : ['insta', 'preview'];
+  const mediaUrl = previewData.preview || '';
+  const caption = previewData.caption || '';
+  const tags = previewData.hashtags ? previewData.hashtags.split(',').map((t) => t.trim()).filter(Boolean) : [];
 
   return (
     <div className="max-w-md mx-auto py-6 px-4 space-y-6 text-neutral-100">

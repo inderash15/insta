@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { Sparkles, UserPlus, Check, ArrowRight, Camera, Compass } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import axios from 'axios';
+import api from '../../services/api';
 
 export default function WelcomePage() {
   const { user } = useAuth();
@@ -14,17 +14,12 @@ export default function WelcomePage() {
   useEffect(() => {
     async function fetchSuggestions() {
       try {
-        const res = await axios.get('/api/explore/people', { withCredentials: true });
-        if (res.data.success) {
-          setSuggestedUsers(res.data.users.slice(0, 4));
+        const res = await api.get('/explore/people');
+        if (res.data?.success) {
+          setSuggestedUsers((res.data.users || []).slice(0, 4));
         }
       } catch (err) {
-        // Fallback demo suggestions if new db
-        setSuggestedUsers([
-          { _id: '1', username: 'alex', fullName: 'Alex Rivera', avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' },
-          { _id: '2', username: 'maya', fullName: 'Maya Lin', avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150' },
-          { _id: '3', username: 'admin', fullName: 'Insta Official', avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150' }
-        ]);
+        setSuggestedUsers([]);
       } finally {
         setLoading(false);
       }
@@ -35,14 +30,14 @@ export default function WelcomePage() {
   const handleToggleFollow = async (targetId) => {
     try {
       if (followedIds.has(targetId)) {
-        await axios.post(`/api/users/${targetId}/unfollow`, {}, { withCredentials: true });
+        await api.post(`/users/${targetId}/unfollow`);
         setFollowedIds((prev) => {
           const next = new Set(prev);
           next.delete(targetId);
           return next;
         });
       } else {
-        await axios.post(`/api/users/${targetId}/follow`, {}, { withCredentials: true });
+        await api.post(`/users/${targetId}/follow`);
         setFollowedIds((prev) => new Set(prev).add(targetId));
       }
     } catch (err) {
@@ -68,9 +63,10 @@ export default function WelcomePage() {
         </div>
 
         {/* Suggested Creators */}
-        <div className="space-y-3">
-          <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Suggested for you</h2>
-          <div className="divide-y divide-neutral-800/80 rounded-2xl border border-neutral-800 bg-neutral-900/40 overflow-hidden">
+        {suggestedUsers.length > 0 ? (
+          <div className="space-y-3">
+            <h2 className="text-xs font-semibold text-neutral-400 uppercase tracking-wider">Suggested for you</h2>
+            <div className="divide-y divide-neutral-800/80 rounded-2xl border border-neutral-800 bg-neutral-900/40 overflow-hidden">
             {suggestedUsers.map((su) => {
               const isFollowing = followedIds.has(su._id);
               return (
@@ -110,6 +106,7 @@ export default function WelcomePage() {
             })}
           </div>
         </div>
+        ) : null}
 
         {/* Quick Actions */}
         <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">

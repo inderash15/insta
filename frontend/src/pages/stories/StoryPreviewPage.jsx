@@ -8,7 +8,7 @@ export default function StoryPreviewPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
 
-  const preview = location.state?.preview || 'https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=600';
+  const preview = location.state?.preview || '';
 
   return (
     <div className="relative w-full h-screen max-w-sm mx-auto flex flex-col justify-between bg-black overflow-hidden shadow-2xl">

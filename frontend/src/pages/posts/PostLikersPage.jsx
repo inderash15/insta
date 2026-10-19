@@ -15,17 +15,12 @@ export default function PostLikersPage() {
     async function loadLikers() {
       try {
         setLoading(true);
-        const res = await api.get(`/posts/${postId}`);
-        if (res.data?.success && res.data.post?.author) {
-          // In MongoDB, Likes collection tracks users who liked; load authors/likers
-          setLikers([
-            res.data.post.author,
-            { _id: 'sample1', username: 'maya', fullName: 'Maya Lin', avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150' },
-            { _id: 'sample2', username: 'alex', fullName: 'Alex Rivera', avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150' }
-          ]);
+        const res = await api.get(`/posts/${postId}/likers`);
+        if (res.data?.success) {
+          setLikers(res.data.likers || []);
         }
       } catch (err) {
-        console.error(err);
+        console.error('Failed to load post likers:', err.message);
       } finally {
         setLoading(false);
       }

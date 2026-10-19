@@ -2,6 +2,7 @@ import { Reel } from '../models/Reel.js';
 import { Like } from '../models/Like.js';
 import { User } from '../models/User.js';
 import { Follow } from '../models/Follow.js';
+import { Comment } from '../models/Comment.js';
 import { createNotification } from './notificationController.js';
 import { getIO } from '../config/socket.js';
 
@@ -244,6 +245,64 @@ export const deleteReel = async (req, res, next) => {
     } catch (e) {}
 
     return res.status(200).json({ success: true, message: 'Reel deleted' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/reels/:id/comments
+export const getReelComments = async (req, res, next) => {
+  try {
+    const reel = await Reel.findById(req.params.id);
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
+    const comments = await Comment.find({
+      $or: [
+        { targetType: 'reel', targetId: reel._id },
+        { post: reel._id }
+      ]
+    })
+      .sort({ createdAt: -1 })
+      .populate('author', 'username fullName avatarUrl isVerified');
+
+    return res.status(200).json({ success: true, comments });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/reels/:id/comments
+export const addReelComment = async (req, res, next) => {
+  try {
+    const { text } = req.body;
+    if (!text || !text.trim()) {
+      return res.status(400).json({ success: false, message: 'Comment text is required' });
+    }
+
+    const reel = await Reel.findById(req.params.id);
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
+    const comment = await Comment.create({
+      targetType: 'reel',
+      targetId: reel._id,
+      author: req.user._id,
+      text: text.trim()
+    });
+
+    await comment.populate('author', 'username fullName avatarUrl isVerified');
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.emit('reel:comment_added', { reelId: reel._id, comment });
+      }
+    } catch (e) {}
+
+    return res.status(201).json({ success: true, comment });
   } catch (err) {
     next(err);
   }
