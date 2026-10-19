@@ -157,3 +157,76 @@ export const getPostsByTag = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/search/posts?q=query
+export const searchPosts = async (req, res, next) => {
+  try {
+    const q = req.query.q?.trim();
+    if (!q) {
+      return res.status(200).json({ success: true, posts: [] });
+    }
+
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+    const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+
+    const privateUsers = await User.find({ isPrivate: true }).select('_id');
+    let allowedPrivateIds = [];
+    if (req.user) {
+      const acceptedFollows = await Follow.find({
+        follower: req.user._id,
+        status: 'accepted'
+      }).select('following');
+      allowedPrivateIds = acceptedFollows.map((f) => f.following);
+    }
+
+    const disallowedPrivateIds = privateUsers
+      .map((u) => u._id)
+      .filter((id) => !req.user || (!req.user._id.equals(id) && !allowedPrivateIds.some((aId) => aId.equals(id))));
+
+    const blockedIds = req.user?.blockedUsers || [];
+    const excludedAuthorIds = [...new Set([...disallowedPrivateIds, ...blockedIds])];
+
+    const posts = await Post.find({
+      caption: regex,
+      author: { $nin: excludedAuthorIds },
+      isArchived: false
+    })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('author', 'username fullName avatarUrl isVerified');
+
+    return res.status(200).json({
+      success: true,
+      query: q,
+      posts
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/search/places?q=query
+export const searchPlaces = async (req, res, next) => {
+  try {
+    const q = req.query.q?.trim();
+    const regex = q ? new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') : /.+/;
+
+    const results = await Post.aggregate([
+      { $match: { location: { $exists: true, $ne: '' }, isArchived: false } },
+      { $match: { location: regex } },
+      { $group: { _id: '$location', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: 20 },
+      { $project: { place: '$_id', count: 1, _id: 0 } }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      places: results
+    });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -76,7 +76,23 @@ const userSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: 'User'
       }
-    ]
+    ],
+    preferences: {
+      theme: { type: String, default: 'dark', enum: ['dark', 'light', 'system'] },
+      notifications: {
+        pauseAll: { type: Boolean, default: false },
+        postsLikes: { type: Boolean, default: true },
+        comments: { type: Boolean, default: true },
+        follows: { type: Boolean, default: true },
+        messages: { type: Boolean, default: true }
+      },
+      accessibility: {
+        highContrast: { type: Boolean, default: false },
+        reduceMotion: { type: Boolean, default: false },
+        captions: { type: Boolean, default: true }
+      },
+      language: { type: String, default: 'en' }
+    }
   },
   {
     timestamps: true,

@@ -186,3 +186,17 @@ export const deleteStory = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/stories/:id
+export const getStoryById = async (req, res, next) => {
+  try {
+    const story = await Story.findById(req.params.id)
+      .populate('author', 'username fullName avatarUrl isVerified');
+    if (!story) {
+      return res.status(404).json({ success: false, message: 'Story not found or expired' });
+    }
+    return res.status(200).json({ success: true, story });
+  } catch (err) {
+    next(err);
+  }
+};

@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { Instagram, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import FormField from '../../components/common/FormField';
 
 export default function SignupPage({ onSwitchToLogin }) {
   const { register } = useAuth();
+  const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
     fullName: '',
@@ -72,13 +74,14 @@ export default function SignupPage({ onSwitchToLogin }) {
     try {
       setSubmitting(true);
       await register({
-        username: formData.username.trim(),
         email: formData.email.trim(),
-        password: formData.password,
-        fullName: formData.fullName.trim()
+        fullName: formData.fullName.trim(),
+        username: formData.username.trim(),
+        password: formData.password
       });
+      navigate('/welcome');
     } catch (err) {
-      setServerError(err.message || 'Registration failed. Please review your details.');
+      setServerError(err.message || 'Registration failed. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -87,7 +90,7 @@ export default function SignupPage({ onSwitchToLogin }) {
   return (
     <div className="w-full max-w-sm space-y-4">
       {/* Primary Signup Card */}
-      <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-8 space-y-6 shadow-xl">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 space-y-5 shadow-xl">
         {/* Brand Header */}
         <div className="flex flex-col items-center space-y-2 text-center">
           <div className="w-12 h-12 rounded-2xl insta-story-gradient p-0.5 flex items-center justify-center shadow-lg shadow-pink-500/20">
@@ -96,14 +99,14 @@ export default function SignupPage({ onSwitchToLogin }) {
             </div>
           </div>
           <h1 className="text-2xl font-bold tracking-tight text-neutral-100">Insta</h1>
-          <p className="text-xs text-neutral-400 leading-relaxed font-medium">
+          <p className="text-xs text-neutral-400 font-medium leading-relaxed">
             Sign up to see photos and videos from your friends.
           </p>
         </div>
 
         {/* Server Error Alert */}
         {serverError && (
-          <div className="bg-red-950/40 border border-red-900/60 rounded-lg p-3 flex items-start gap-2.5 text-xs text-red-300">
+          <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 flex items-start gap-2.5 text-xs text-red-300">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <span>{serverError}</span>
           </div>
@@ -147,7 +150,7 @@ export default function SignupPage({ onSwitchToLogin }) {
 
           <FormField
             id="signup-password"
-            label="Password (min 8 characters)"
+            label="Password"
             type="password"
             value={formData.password}
             onChange={handleChange('password')}
@@ -169,14 +172,16 @@ export default function SignupPage({ onSwitchToLogin }) {
             required
           />
 
-          <p className="text-[11px] text-neutral-500 text-center leading-normal pt-1">
-            By signing up, you agree to our Terms, Privacy Policy and Cookies Policy.
+          <p className="text-[11px] text-neutral-500 leading-normal text-center pt-1">
+            By signing up, you agree to our{' '}
+            <Link to="/legal" className="text-neutral-400 hover:text-white transition">Terms</Link> and{' '}
+            <Link to="/legal" className="text-neutral-400 hover:text-white transition">Privacy Policy</Link>.
           </p>
 
           <button
             type="submit"
             disabled={submitting}
-            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
+            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
           >
             {submitting ? (
               <>
@@ -191,15 +196,24 @@ export default function SignupPage({ onSwitchToLogin }) {
       </div>
 
       {/* Switch to Login Card */}
-      <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 text-center text-xs text-neutral-400">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 text-center text-xs text-neutral-400">
         <span>Have an account? </span>
-        <button
-          type="button"
-          onClick={onSwitchToLogin}
-          className="font-semibold text-blue-500 hover:text-blue-400 transition"
-        >
-          Log in
-        </button>
+        {onSwitchToLogin ? (
+          <button
+            type="button"
+            onClick={onSwitchToLogin}
+            className="font-semibold text-blue-500 hover:text-blue-400 transition ml-1"
+          >
+            Log in
+          </button>
+        ) : (
+          <Link
+            to="/auth/login"
+            className="font-semibold text-blue-500 hover:text-blue-400 transition ml-1"
+          >
+            Log in
+          </Link>
+        )}
       </div>
     </div>
   );

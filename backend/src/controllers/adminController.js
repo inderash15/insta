@@ -201,3 +201,31 @@ export const updateAdminUser = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/admin/audit
+export const getAuditLogs = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+
+    const [logs, total] = await Promise.all([
+      AuditLog.find()
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .populate('actor', 'username fullName avatarUrl'),
+      AuditLog.countDocuments()
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      page,
+      total,
+      hasMore: page * limit < total,
+      logs
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

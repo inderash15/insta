@@ -12,6 +12,7 @@ import {
   Sparkles 
 } from 'lucide-react';
 import api from '../../services/api';
+import ReelsNav from '../../components/reels/ReelsNav';
 
 export default function ReelsPage() {
   const [reels, setReels] = useState([]);
@@ -77,7 +78,8 @@ export default function ReelsPage() {
   };
 
   return (
-    <div className="w-full flex justify-center py-4 px-2">
+    <div className="w-full flex flex-col items-center py-4 px-2">
+      <ReelsNav />
       {loading ? (
         <div className="py-24 flex flex-col items-center justify-center gap-3">
           <Loader2 className="w-8 h-8 text-pink-500 animate-spin" />

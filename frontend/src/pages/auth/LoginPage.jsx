@@ -1,10 +1,15 @@
 import React, { useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { Instagram, AlertCircle, Loader2 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import FormField from '../../components/common/FormField';
 
 export default function LoginPage({ onSwitchToSignup }) {
   const { login } = useAuth();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectUrl = searchParams.get('redirect') || '/home';
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [errors, setErrors] = useState({});
@@ -33,6 +38,7 @@ export default function LoginPage({ onSwitchToSignup }) {
     try {
       setSubmitting(true);
       await login(identifier.trim(), password);
+      navigate(redirectUrl, { replace: true });
     } catch (err) {
       setServerError(err.message || 'Login failed. Please check your credentials.');
     } finally {
@@ -43,7 +49,7 @@ export default function LoginPage({ onSwitchToSignup }) {
   return (
     <div className="w-full max-w-sm space-y-4">
       {/* Primary Login Card */}
-      <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-8 space-y-6 shadow-xl">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-8 space-y-6 shadow-xl">
         {/* Brand Header */}
         <div className="flex flex-col items-center space-y-2">
           <div className="w-12 h-12 rounded-2xl insta-story-gradient p-0.5 flex items-center justify-center shadow-lg shadow-pink-500/20">
@@ -57,7 +63,7 @@ export default function LoginPage({ onSwitchToSignup }) {
 
         {/* Server Error Alert */}
         {serverError && (
-          <div className="bg-red-950/40 border border-red-900/60 rounded-lg p-3 flex items-start gap-2.5 text-xs text-red-300">
+          <div className="bg-red-950/40 border border-red-900/60 rounded-xl p-3 flex items-start gap-2.5 text-xs text-red-300">
             <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
             <span>{serverError}</span>
           </div>
@@ -97,7 +103,7 @@ export default function LoginPage({ onSwitchToSignup }) {
           <button
             type="submit"
             disabled={submitting || !identifier.trim() || !password}
-            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold rounded-lg transition flex items-center justify-center gap-2 shadow-sm"
+            className="w-full py-2.5 px-4 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs sm:text-sm font-semibold rounded-xl transition flex items-center justify-center gap-2 shadow-sm"
           >
             {submitting ? (
               <>
@@ -118,26 +124,34 @@ export default function LoginPage({ onSwitchToSignup }) {
         </div>
 
         <div className="text-center">
-          <button
-            type="button"
+          <Link
+            to="/auth/forgot-password"
             className="text-xs text-neutral-400 hover:text-neutral-200 transition"
-            onClick={() => alert('Password reset flow will be fully enabled in settings.')}
           >
             Forgot password?
-          </button>
+          </Link>
         </div>
       </div>
 
       {/* Switch to Signup Card */}
-      <div className="bg-neutral-950 border border-neutral-800 rounded-xl p-5 text-center text-xs text-neutral-400">
+      <div className="bg-neutral-950 border border-neutral-800 rounded-2xl p-5 text-center text-xs text-neutral-400">
         <span>Don't have an account? </span>
-        <button
-          type="button"
-          onClick={onSwitchToSignup}
-          className="font-semibold text-blue-500 hover:text-blue-400 transition"
-        >
-          Sign up
-        </button>
+        {onSwitchToSignup ? (
+          <button
+            type="button"
+            onClick={onSwitchToSignup}
+            className="font-semibold text-blue-500 hover:text-blue-400 transition ml-1"
+          >
+            Sign up
+          </button>
+        ) : (
+          <Link
+            to="/auth/signup"
+            className="font-semibold text-blue-500 hover:text-blue-400 transition ml-1"
+          >
+            Sign up
+          </Link>
+        )}
       </div>
     </div>
   );

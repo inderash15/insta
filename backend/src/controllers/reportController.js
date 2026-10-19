@@ -59,3 +59,16 @@ export const createReport = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/reports/my
+export const getMyReports = async (req, res, next) => {
+  try {
+    const reports = await Report.find({ reporter: req.user._id })
+      .sort({ createdAt: -1 })
+      .limit(50);
+    return res.status(200).json({ success: true, reports });
+  } catch (err) {
+    next(err);
+  }
+};
+

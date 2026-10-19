@@ -15,6 +15,7 @@ import {
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
+import DirectNav from '../../components/messages/DirectNav';
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -224,8 +225,9 @@ export default function MessagesPage() {
   };
 
   return (
-    <div className="w-full max-w-5xl mx-auto h-[82vh] max-h-[780px] my-4 px-2 sm:px-4">
-      <div className="w-full h-full bg-neutral-900/60 border border-neutral-800 rounded-2xl overflow-hidden backdrop-blur flex shadow-2xl">
+    <div className="w-full max-w-5xl mx-auto h-[86vh] max-h-[820px] my-4 px-2 sm:px-4 flex flex-col">
+      <DirectNav />
+      <div className="w-full flex-1 min-h-0 bg-neutral-900/60 border border-neutral-800 rounded-2xl overflow-hidden backdrop-blur flex shadow-2xl">
         {/* Left Conversations Sidebar */}
         <div className={`w-full sm:w-80 md:w-96 border-r border-neutral-800 flex flex-col ${activeConv ? 'hidden sm:flex' : 'flex'}`}>
           {/* Header */}

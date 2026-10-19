@@ -20,6 +20,7 @@ import conversationRoutes from './routes/conversations.js';
 import notificationRoutes from './routes/notifications.js';
 import reportRoutes from './routes/reports.js';
 import adminRoutes from './routes/admin.js';
+import settingsRoutes from './routes/settings.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -77,6 +78,7 @@ app.use('/api/conversations', conversationRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/settings', settingsRoutes);
 
 
 // Error handling

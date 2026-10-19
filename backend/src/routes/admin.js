@@ -5,7 +5,8 @@ import {
   getReports,
   resolveReport,
   getAdminUsers,
-  updateAdminUser
+  updateAdminUser,
+  getAuditLogs
 } from '../controllers/adminController.js';
 
 const router = express.Router();
@@ -18,5 +19,6 @@ router.get('/reports', getReports);
 router.patch('/reports/:id', resolveReport);
 router.get('/users', getAdminUsers);
 router.patch('/users/:id', updateAdminUser);
+router.get('/audit', getAuditLogs);
 
 export default router;

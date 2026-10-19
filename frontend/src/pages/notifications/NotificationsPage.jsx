@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import { useSocket } from '../../context/SocketContext';
+import NotificationsNav from '../../components/notifications/NotificationsNav';
 
 export default function NotificationsPage({ onSelectUser }) {
   const { setUnreadNotifications } = useSocket();
@@ -78,10 +79,11 @@ export default function NotificationsPage({ onSelectUser }) {
 
   return (
     <div className="w-full max-w-xl mx-auto py-6 px-4 space-y-4">
+      <NotificationsNav />
       {/* Header */}
       <div className="flex items-center justify-between border-b border-neutral-800 pb-4">
         <h2 className="text-base font-bold text-neutral-100 flex items-center gap-2">
-          <span>Notifications</span>
+          <span>All Notifications</span>
         </h2>
         {notifications.some((n) => !n.isRead) && (
           <button

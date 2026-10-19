@@ -45,8 +45,27 @@ export const getNotifications = async (req, res, next) => {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
 
+    const filterQuery = { recipient: req.user._id };
+    if (req.query.type) {
+      if (req.query.type === 'following') {
+        filterQuery.type = { $in: ['follow', 'follow_request', 'follow_accept'] };
+      } else if (req.query.type === 'posts') {
+        filterQuery.type = { $in: ['like_post', 'save_post', 'share_post'] };
+      } else if (req.query.type === 'comments') {
+        filterQuery.type = { $in: ['comment_post', 'reply_comment', 'like_comment'] };
+      } else if (req.query.type === 'mentions') {
+        filterQuery.type = { $in: ['mention_post', 'mention_comment', 'mention_story'] };
+      } else if (req.query.type === 'messages') {
+        filterQuery.type = { $in: ['message', 'chat_invite'] };
+      } else if (req.query.type === 'requests') {
+        filterQuery.type = { $in: ['follow_request'] };
+      } else {
+        filterQuery.type = req.query.type;
+      }
+    }
+
     const [notifications, unreadCount] = await Promise.all([
-      Notification.find({ recipient: req.user._id })
+      Notification.find(filterQuery)
         .sort({ createdAt: -1 })
         .skip((page - 1) * limit)
         .limit(limit)

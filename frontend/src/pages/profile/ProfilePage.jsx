@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useParams, useNavigate, Link } from 'react-router-dom';
 import { 
   Grid, 
   Bookmark, 
@@ -12,14 +13,18 @@ import {
   Loader2, 
   ShieldAlert,
   Heart,
-  MessageCircle 
+  MessageCircle,
+  Tag,
+  Users
 } from 'lucide-react';
 import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import EditProfileModal from '../../components/modals/EditProfileModal';
 import PostDetailModal from '../../components/modals/PostDetailModal';
 
-export default function ProfilePage({ username: targetUsername, onOpenSettings, onNavigateToMessages }) {
+export default function ProfilePage({ username: propUsername, onOpenSettings, onNavigateToMessages }) {
+  const { username: routeUsername } = useParams();
+  const navigate = useNavigate();
   const { user: currentUser } = useAuth();
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
@@ -31,7 +36,7 @@ export default function ProfilePage({ username: targetUsername, onOpenSettings, 
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef(null);
 
-  const usernameToFetch = targetUsername || currentUser?.username;
+  const usernameToFetch = propUsername || routeUsername || currentUser?.username;
   const isSelf = currentUser?.username?.toLowerCase() === usernameToFetch?.toLowerCase();
 
   const fetchProfileAndContent = async () => {

@@ -4,6 +4,7 @@ import { uploadReelMedia } from '../middleware/upload.js';
 import {
   createReel,
   getReels,
+  getReelById,
   viewReel,
   toggleLikeReel,
   deleteReel
@@ -13,6 +14,7 @@ const router = express.Router();
 
 router.get('/', optionalAuth, getReels);
 router.post('/', requireAuth, uploadReelMedia, createReel);
+router.get('/:id', optionalAuth, getReelById);
 router.post('/:id/view', optionalAuth, viewReel);
 router.post('/:id/like', requireAuth, toggleLikeReel);
 router.delete('/:id', requireAuth, deleteReel);

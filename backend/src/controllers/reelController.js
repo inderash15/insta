@@ -1,8 +1,8 @@
 import { Reel } from '../models/Reel.js';
 import { Like } from '../models/Like.js';
 import { User } from '../models/User.js';
+import { Follow } from '../models/Follow.js';
 import { createNotification } from './notificationController.js';
-
 
 const parseHashtags = (text) => {
   if (!text) return [];
@@ -47,13 +47,25 @@ export const getReels = async (req, res, next) => {
   try {
     const page = parseInt(req.query.page, 10) || 1;
     const limit = Math.min(parseInt(req.query.limit, 10) || 10, 20);
+    const filter = req.query.filter;
 
     const blockedIds = req.user?.blockedUsers || [];
+    let query = { author: { $nin: blockedIds } };
+    let sort = { createdAt: -1 };
 
-    const reels = await Reel.find({
-      author: { $nin: blockedIds }
-    })
-      .sort({ createdAt: -1 })
+    if (filter === 'trending') {
+      sort = { viewsCount: -1, likesCount: -1, createdAt: -1 };
+    } else if (filter === 'following' && req.user) {
+      const followingDocs = await Follow.find({
+        follower: req.user._id,
+        status: 'accepted'
+      }).select('following');
+      const followingIds = followingDocs.map((f) => f.following);
+      query = { author: { $in: followingIds, $nin: blockedIds } };
+    }
+
+    const reels = await Reel.find(query)
+      .sort(sort)
       .skip((page - 1) * limit)
       .limit(limit)
       .populate('author', 'username fullName avatarUrl isVerified isPrivate');
@@ -80,6 +92,38 @@ export const getReels = async (req, res, next) => {
       page,
       hasMore: reels.length === limit,
       reels: enrichedReels
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/reels/:id
+export const getReelById = async (req, res, next) => {
+  try {
+    const reel = await Reel.findById(req.params.id)
+      .populate('author', 'username fullName avatarUrl isVerified isPrivate');
+
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
+    let isLiked = false;
+    if (req.user) {
+      const like = await Like.findOne({
+        user: req.user._id,
+        targetType: 'reel',
+        targetId: reel._id
+      });
+      isLiked = !!like;
+    }
+
+    const obj = reel.toJSON();
+    obj.isLiked = isLiked;
+
+    return res.status(200).json({
+      success: true,
+      reel: obj
     });
   } catch (err) {
     next(err);
