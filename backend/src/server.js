@@ -3,6 +3,7 @@ import app from './app.js';
 import { env } from './config/env.js';
 import { connectDB, disconnectDB } from './config/db.js';
 import { initSocket } from './config/socket.js';
+import { seedDatabaseIfEmpty } from './utils/seed.js';
 
 const server = http.createServer(app);
 
@@ -13,7 +14,9 @@ initSocket(server);
 const startServer = async () => {
   try {
     await connectDB();
+    await seedDatabaseIfEmpty();
     server.listen(env.PORT, () => {
+
       console.log(`[Server] Insta backend listening on port ${env.PORT} in ${env.NODE_ENV} mode`);
       console.log(`[Server] Health check: http://localhost:${env.PORT}/api/health`);
     });
