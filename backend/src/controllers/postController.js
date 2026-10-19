@@ -1,0 +1,403 @@
+import mongoose from 'mongoose';
+import { Post } from '../models/Post.js';
+import { Comment } from '../models/Comment.js';
+import { Like } from '../models/Like.js';
+import { Bookmark } from '../models/Bookmark.js';
+import { Follow } from '../models/Follow.js';
+import { User } from '../models/User.js';
+import { createNotification } from './notificationController.js';
+
+
+const parseHashtags = (text) => {
+  if (!text) return [];
+  const matches = text.match(/#([a-zA-Z0-9_]+)/g);
+  return matches ? [...new Set(matches.map((tag) => tag.slice(1).toLowerCase()))] : [];
+};
+
+const parseMentions = (text) => {
+  if (!text) return [];
+  const matches = text.match(/@([a-zA-Z0-9._]+)/g);
+  return matches ? [...new Set(matches.map((m) => m.slice(1).toLowerCase()))] : [];
+};
+
+// POST /api/posts
+export const createPost = async (req, res, next) => {
+  try {
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ success: false, message: 'At least one media file is required' });
+    }
+
+    const media = req.files.map((file) => ({
+      url: `/uploads/posts/${file.filename}`,
+      type: file.mimetype.startsWith('video') ? 'video' : 'image',
+      width: 1080,
+      height: 1080,
+      aspectRatio: '1:1'
+    }));
+
+    const caption = req.body.caption || '';
+    const hashtags = parseHashtags(caption);
+    const mentions = parseMentions(caption);
+
+    const post = await Post.create({
+      author: req.user._id,
+      caption,
+      media,
+      hashtags,
+      mentions
+    });
+
+    await User.findByIdAndUpdate(req.user._id, { $inc: { 'counts.posts': 1 } });
+
+    await post.populate('author', 'username fullName avatarUrl isVerified');
+
+    return res.status(201).json({
+      success: true,
+      message: 'Post created successfully',
+      post
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/posts/feed
+export const getFeed = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 10;
+
+    // Get accounts followed by user
+    const follows = await Follow.find({ follower: req.user._id, status: 'accepted' });
+    const followedIds = follows.map((f) => f.following);
+
+    // Eligible authors: self + followed accounts, excluding blocked users
+    const eligibleAuthors = [req.user._id, ...followedIds].filter(
+      (id) => !req.user.blockedUsers.some((bId) => bId.equals(id))
+    );
+
+    const posts = await Post.find({
+      author: { $in: eligibleAuthors },
+      isArchived: false
+    })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate('author', 'username fullName avatarUrl isVerified isPrivate');
+
+    // Attach isLiked & isBookmarked flags
+    const postIds = posts.map((p) => p._id);
+    const [likes, bookmarks] = await Promise.all([
+      Like.find({ user: req.user._id, targetType: 'post', targetId: { $in: postIds } }),
+      Bookmark.find({ user: req.user._id, post: { $in: postIds } })
+    ]);
+
+    const likedSet = new Set(likes.map((l) => l.targetId.toString()));
+    const bookmarkedSet = new Set(bookmarks.map((b) => b.post.toString()));
+
+    const enrichedPosts = posts.map((p) => {
+      const obj = p.toJSON();
+      obj.isLiked = likedSet.has(p._id.toString());
+      obj.isBookmarked = bookmarkedSet.has(p._id.toString());
+      return obj;
+    });
+
+    return res.status(200).json({
+      success: true,
+      page,
+      hasMore: posts.length === limit,
+      posts: enrichedPosts
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/posts/:id
+export const getPost = async (req, res, next) => {
+  try {
+    const post = await Post.findById(req.params.id).populate(
+      'author',
+      'username fullName avatarUrl isVerified isPrivate'
+    );
+
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Check privacy
+    if (post.author.isPrivate && (!req.user || (!req.user._id.equals(post.author._id) && !(await Follow.exists({ follower: req.user._id, following: post.author._id, status: 'accepted' }))))) {
+      return res.status(403).json({ success: false, message: 'This post is from a private account' });
+    }
+
+    const obj = post.toJSON();
+    if (req.user) {
+      const [liked, bookmarked] = await Promise.all([
+        Like.exists({ user: req.user._id, targetType: 'post', targetId: post._id }),
+        Bookmark.exists({ user: req.user._id, post: post._id })
+      ]);
+      obj.isLiked = !!liked;
+      obj.isBookmarked = !!bookmarked;
+    }
+
+    return res.status(200).json({ success: true, post: obj });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE /api/posts/:id
+export const deletePost = async (req, res, next) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    // Ownership check: author or moderator/admin
+    const isOwner = post.author.equals(req.user._id);
+    const isPrivileged = req.user.role === 'admin' || req.user.role === 'moderator';
+
+    if (!isOwner && !isPrivileged) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to delete this post' });
+    }
+
+    await Post.findByIdAndDelete(post._id);
+    await User.findByIdAndUpdate(post.author, { $inc: { 'counts.posts': -1 } });
+
+    // Clean up associated likes, comments, and bookmarks
+    await Promise.all([
+      Like.deleteMany({ targetType: 'post', targetId: post._id }),
+      Comment.deleteMany({ post: post._id }),
+      Bookmark.deleteMany({ post: post._id })
+    ]);
+
+    return res.status(200).json({ success: true, message: 'Post deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/posts/:id/like
+export const toggleLike = async (req, res, next) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    const existing = await Like.findOne({
+      user: req.user._id,
+      targetType: 'post',
+      targetId: post._id
+    });
+
+    if (existing) {
+      // Unlike
+      await Like.findByIdAndDelete(existing._id);
+      const updated = await Post.findByIdAndUpdate(
+        post._id,
+        { $inc: { likesCount: -1 } },
+        { new: true }
+      );
+      return res.status(200).json({ success: true, liked: false, likesCount: Math.max(0, updated.likesCount) });
+    }
+
+    // Like
+    await Like.create({
+      user: req.user._id,
+      targetType: 'post',
+      targetId: post._id
+    });
+
+    const updated = await Post.findByIdAndUpdate(
+      post._id,
+      { $inc: { likesCount: 1 } },
+      { new: true }
+    );
+
+    // Notify author asynchronously
+    createNotification({
+      recipient: post.author,
+      sender: req.user._id,
+      type: 'like_post',
+      post: post._id
+    });
+
+    return res.status(200).json({ success: true, liked: true, likesCount: updated.likesCount });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/posts/:id/bookmark
+export const toggleBookmark = async (req, res, next) => {
+  try {
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    const existing = await Bookmark.findOne({
+      user: req.user._id,
+      post: post._id
+    });
+
+    if (existing) {
+      await Bookmark.findByIdAndDelete(existing._id);
+      return res.status(200).json({ success: true, bookmarked: false, message: 'Post removed from saved' });
+    }
+
+    await Bookmark.create({
+      user: req.user._id,
+      post: post._id
+    });
+
+    return res.status(200).json({ success: true, bookmarked: true, message: 'Post saved' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/posts/saved
+export const getSavedPosts = async (req, res, next) => {
+  try {
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 12;
+
+    const bookmarks = await Bookmark.find({ user: req.user._id })
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .populate({
+        path: 'post',
+        populate: { path: 'author', select: 'username fullName avatarUrl isVerified' }
+      });
+
+    const posts = bookmarks.filter((b) => b.post !== null).map((b) => b.post);
+
+    return res.status(200).json({
+      success: true,
+      page,
+      posts
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/posts/:id/comments
+export const addComment = async (req, res, next) => {
+  try {
+    const text = req.body.text?.trim();
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Comment text cannot be empty' });
+    }
+
+    const post = await Post.findById(req.params.id);
+    if (!post) {
+      return res.status(404).json({ success: false, message: 'Post not found' });
+    }
+
+    if (post.commentsDisabled) {
+      return res.status(403).json({ success: false, message: 'Comments are disabled on this post' });
+    }
+
+    const comment = await Comment.create({
+      post: post._id,
+      author: req.user._id,
+      text,
+      parentComment: req.body.parentComment || null
+    });
+
+    await Post.findByIdAndUpdate(post._id, { $inc: { commentsCount: 1 } });
+
+    await comment.populate('author', 'username fullName avatarUrl isVerified');
+
+    // Notify post author asynchronously
+    createNotification({
+      recipient: post.author,
+      sender: req.user._id,
+      type: 'comment',
+      post: post._id,
+      comment: comment._id,
+      text: text.slice(0, 60)
+    });
+
+    return res.status(201).json({
+      success: true,
+      message: 'Comment added',
+      comment
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/posts/:id/comments
+export const getComments = async (req, res, next) => {
+  try {
+    const comments = await Comment.find({ post: req.params.id })
+      .sort({ createdAt: 1 })
+      .populate('author', 'username fullName avatarUrl isVerified');
+
+    return res.status(200).json({
+      success: true,
+      comments
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// DELETE /api/comments/:id
+export const deleteComment = async (req, res, next) => {
+  try {
+    const comment = await Comment.findById(req.params.id);
+    if (!comment) {
+      return res.status(404).json({ success: false, message: 'Comment not found' });
+    }
+
+    const post = await Post.findById(comment.post);
+    const isCommentAuthor = comment.author.equals(req.user._id);
+    const isPostAuthor = post && post.author.equals(req.user._id);
+    const isPrivileged = req.user.role === 'admin' || req.user.role === 'moderator';
+
+    if (!isCommentAuthor && !isPostAuthor && !isPrivileged) {
+      return res.status(403).json({ success: false, message: 'Unauthorized to delete this comment' });
+    }
+
+    await Comment.findByIdAndDelete(comment._id);
+    if (post) {
+      await Post.findByIdAndUpdate(post._id, { $inc: { commentsCount: -1 } });
+    }
+
+    return res.status(200).json({ success: true, message: 'Comment deleted' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/posts/user/:username
+export const getUserPosts = async (req, res, next) => {
+  try {
+    const targetUser = await User.findOne({ username: req.params.username.toLowerCase() });
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    // Check privacy
+    if (targetUser.isPrivate && (!req.user || (!req.user._id.equals(targetUser._id) && !(await Follow.exists({ follower: req.user._id, following: targetUser._id, status: 'accepted' }))))) {
+      return res.status(403).json({ success: false, message: 'This account is private' });
+    }
+
+    const posts = await Post.find({ author: targetUser._id, isArchived: false })
+      .sort({ createdAt: -1 })
+      .populate('author', 'username fullName avatarUrl isVerified');
+
+    return res.status(200).json({ success: true, posts });
+  } catch (err) {
+    next(err);
+  }
+};
