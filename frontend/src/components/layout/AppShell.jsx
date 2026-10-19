@@ -16,16 +16,22 @@ import {
   ShieldCheck,
   Bookmark,
   HelpCircle,
-  ShieldAlert
+  ShieldAlert,
+  Image as ImageIcon,
+  Sparkles,
+  StickyNote
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import CreateModal from '../modals/CreateModal';
+import CreateNoteModal from '../notes/CreateNoteModal';
 
 export default function AppShell() {
   const { user, logout } = useAuth();
   const { unreadNotifications, unreadMessages } = useSocket();
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [showCreateMenu, setShowCreateMenu] = useState(false);
+  const [createModalState, setCreateModalState] = useState({ isOpen: false, mode: 'post' });
+  const [isNoteModalOpen, setIsNoteModalOpen] = useState(false);
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -68,14 +74,75 @@ export default function AppShell() {
 
               if (item.isAction) {
                 return (
-                  <button
-                    key="action-create"
-                    onClick={() => setIsCreateOpen(true)}
-                    className="w-full flex items-center gap-4 px-3.5 py-3 rounded-2xl text-xs font-semibold text-neutral-300 hover:bg-neutral-900/60 hover:text-white transition group"
-                  >
-                    <Icon className="w-5 h-5 stroke-[1.8] group-hover:scale-110 transition shrink-0" />
-                    <span className="hidden lg:block">{item.label}</span>
-                  </button>
+                  <div key="action-create" className="relative">
+                    <button
+                      onClick={() => setShowCreateMenu(!showCreateMenu)}
+                      className="w-full flex items-center gap-4 px-3.5 py-3 rounded-2xl text-xs font-semibold text-neutral-300 hover:bg-neutral-900/60 hover:text-white transition group"
+                    >
+                      <Icon className="w-5 h-5 stroke-[1.8] group-hover:scale-110 transition shrink-0" />
+                      <span className="hidden lg:block">{item.label}</span>
+                    </button>
+
+                    {showCreateMenu && (
+                      <div className="absolute top-0 left-full ml-3 w-56 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-1.5 z-50 text-xs space-y-1 animate-fadeIn">
+                        <button
+                          onClick={() => {
+                            setShowCreateMenu(false);
+                            setCreateModalState({ isOpen: true, mode: 'post' });
+                          }}
+                          className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 hover:text-white flex items-center gap-2.5 transition"
+                        >
+                          <ImageIcon className="w-4 h-4 text-pink-400 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-xs">Create Post</span>
+                            <span className="text-[10px] text-neutral-500">Feed photos & videos</span>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowCreateMenu(false);
+                            setCreateModalState({ isOpen: true, mode: 'reel' });
+                          }}
+                          className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 hover:text-white flex items-center gap-2.5 transition"
+                        >
+                          <Film className="w-4 h-4 text-pink-400 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-xs">Create Reel</span>
+                            <span className="text-[10px] text-neutral-500">Short video with audio</span>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowCreateMenu(false);
+                            setCreateModalState({ isOpen: true, mode: 'story' });
+                          }}
+                          className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 hover:text-white flex items-center gap-2.5 transition"
+                        >
+                          <Sparkles className="w-4 h-4 text-pink-400 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-xs">New Story</span>
+                            <span className="text-[10px] text-neutral-500">24h photo or video</span>
+                          </div>
+                        </button>
+
+                        <button
+                          onClick={() => {
+                            setShowCreateMenu(false);
+                            setIsNoteModalOpen(true);
+                          }}
+                          className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 hover:text-white flex items-center gap-2.5 transition"
+                        >
+                          <StickyNote className="w-4 h-4 text-purple-400 shrink-0" />
+                          <div className="flex flex-col">
+                            <span className="font-semibold text-xs">Share a Note</span>
+                            <span className="text-[10px] text-neutral-500">Quick thought bubble</span>
+                          </div>
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 );
               }
 
@@ -243,12 +310,62 @@ export default function AppShell() {
           <Compass className="w-5 h-5" />
         </Link>
 
-        <button
-          onClick={() => setIsCreateOpen(true)}
-          className="p-1.5 text-neutral-300 hover:text-white"
-        >
-          <PlusSquare className="w-6 h-6 text-pink-500" />
-        </button>
+        <div className="relative">
+          <button
+            onClick={() => setShowCreateMenu(!showCreateMenu)}
+            className="p-1.5 text-neutral-300 hover:text-white"
+          >
+            <PlusSquare className="w-6 h-6 text-pink-500" />
+          </button>
+
+          {showCreateMenu && (
+            <div className="absolute bottom-12 left-1/2 -translate-x-1/2 w-52 bg-neutral-900 border border-neutral-800 rounded-2xl shadow-2xl p-1.5 z-50 text-xs space-y-1 animate-fadeIn">
+              <button
+                onClick={() => {
+                  setShowCreateMenu(false);
+                  setCreateModalState({ isOpen: true, mode: 'post' });
+                }}
+                className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 flex items-center gap-2.5 transition"
+              >
+                <ImageIcon className="w-4 h-4 text-pink-400" />
+                <span className="font-semibold text-xs">Create Post</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowCreateMenu(false);
+                  setCreateModalState({ isOpen: true, mode: 'reel' });
+                }}
+                className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 flex items-center gap-2.5 transition"
+              >
+                <Film className="w-4 h-4 text-pink-400" />
+                <span className="font-semibold text-xs">Create Reel</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowCreateMenu(false);
+                  setCreateModalState({ isOpen: true, mode: 'story' });
+                }}
+                className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 flex items-center gap-2.5 transition"
+              >
+                <Sparkles className="w-4 h-4 text-pink-400" />
+                <span className="font-semibold text-xs">New Story</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowCreateMenu(false);
+                  setIsNoteModalOpen(true);
+                }}
+                className="w-full px-3 py-2 rounded-xl text-left text-neutral-200 hover:bg-neutral-800 flex items-center gap-2.5 transition"
+              >
+                <StickyNote className="w-4 h-4 text-purple-400" />
+                <span className="font-semibold text-xs">Share a Note</span>
+              </button>
+            </div>
+          )}
+        </div>
 
         <Link
           to="/reels"
@@ -271,12 +388,26 @@ export default function AppShell() {
         </Link>
       </nav>
 
-      {/* Global Create Modal */}
-      {isCreateOpen && (
+      {/* Global Isolated Create Modal */}
+      {createModalState.isOpen && (
         <CreateModal
-          isOpen={isCreateOpen}
-          onClose={() => setIsCreateOpen(false)}
-          onCreated={() => navigate('/home')}
+          isOpen={createModalState.isOpen}
+          initialMode={createModalState.mode}
+          lockMode={true}
+          onClose={() => setCreateModalState((prev) => ({ ...prev, isOpen: false }))}
+          onCreated={() => {
+            if (createModalState.mode === 'reel') navigate('/reels');
+            else navigate('/home');
+          }}
+        />
+      )}
+
+      {/* Social Note Creator Modal */}
+      {isNoteModalOpen && (
+        <CreateNoteModal
+          isOpen={isNoteModalOpen}
+          onClose={() => setIsNoteModalOpen(false)}
+          onNoteCreated={() => navigate('/home')}
         />
       )}
     </div>

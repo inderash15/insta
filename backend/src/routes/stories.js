@@ -10,7 +10,8 @@ import {
   replyToStory,
   createHighlight,
   getUserHighlights,
-  deleteHighlight
+  deleteHighlight,
+  getUserActiveStories
 } from '../controllers/storyController.js';
 import { requireAuth } from '../middleware/authGuard.js';
 import { uploadStoryMedia } from '../middleware/upload.js';
@@ -20,6 +21,7 @@ const router = express.Router();
 router.post('/', requireAuth, uploadStoryMedia, createStory);
 router.get('/feed', requireAuth, getStoryTray);
 router.get('/tray', requireAuth, getStoryTray);
+router.get('/user/:userId', requireAuth, getUserActiveStories);
 router.post('/highlights', requireAuth, createHighlight);
 router.get('/highlights/user/:userId', requireAuth, getUserHighlights);
 router.delete('/highlights/:id', requireAuth, deleteHighlight);

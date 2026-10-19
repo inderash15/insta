@@ -22,6 +22,7 @@ import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import EditProfileModal from '../../components/modals/EditProfileModal';
 import PostDetailModal from '../../components/modals/PostDetailModal';
+import StoryViewerModal from '../../components/modals/StoryViewerModal';
 
 export default function ProfilePage({ username: propUsername, onOpenSettings, onNavigateToMessages }) {
   const { username: routeUsername } = useParams();
@@ -31,6 +32,8 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
   const [profile, setProfile] = useState(null);
   const [posts, setPosts] = useState([]);
   const [savedPosts, setSavedPosts] = useState([]);
+  const [storyGroup, setStoryGroup] = useState(null);
+  const [isStoryViewerOpen, setIsStoryViewerOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('posts'); // 'posts' | 'reels' | 'saved'
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -41,6 +44,20 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
   const usernameToFetch = propUsername || routeUsername || currentUser?.username;
   const isSelf = currentUser?.username?.toLowerCase() === usernameToFetch?.toLowerCase();
 
+  const fetchUserStories = async (userIdOrUsername) => {
+    if (!userIdOrUsername) return;
+    try {
+      const res = await api.get(`/stories/user/${userIdOrUsername}`);
+      if (res.data?.success && res.data.storyGroup) {
+        setStoryGroup(res.data.storyGroup);
+      } else {
+        setStoryGroup(null);
+      }
+    } catch {
+      setStoryGroup(null);
+    }
+  };
+
   const fetchProfileAndContent = async () => {
     if (!usernameToFetch) return;
     setLoading(true);
@@ -48,6 +65,9 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
       const profileRes = await api.get(`/users/${usernameToFetch}`);
       if (profileRes.data?.success) {
         setProfile(profileRes.data.profile);
+
+        // Fetch user active stories
+        fetchUserStories(profileRes.data.profile._id);
 
         // Fetch user posts if permitted
         if (profileRes.data.profile.relationship?.canViewContent) {
@@ -148,16 +168,24 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
       }
     };
 
+    const handleStoryUpdate = () => {
+      fetchUserStories(pId);
+    };
+
     socket.on('follower_count_updated', handleFollowerCount);
     socket.on('following_count_updated', handleFollowingCount);
     socket.on('post:created', handlePostCreated);
     socket.on('post:deleted', handlePostDeleted);
+    socket.on('story:created', handleStoryUpdate);
+    socket.on('story:deleted', handleStoryUpdate);
 
     return () => {
       socket.off('follower_count_updated', handleFollowerCount);
       socket.off('following_count_updated', handleFollowingCount);
       socket.off('post:created', handlePostCreated);
       socket.off('post:deleted', handlePostDeleted);
+      socket.off('story:created', handleStoryUpdate);
+      socket.off('story:deleted', handleStoryUpdate);
     };
   }, [socket, profile?._id, currentUser, posts]);
 
@@ -239,33 +267,55 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
     <div className="w-full max-w-4xl mx-auto py-8 px-4 space-y-8">
       {/* Profile Header Card */}
       <div className="flex flex-col sm:flex-row items-center sm:items-start gap-8 border-b border-neutral-800 pb-8">
-        {/* Avatar with upload badge */}
+        {/* Avatar with Story Ring & upload badge */}
         <div className="relative group shrink-0">
-          <div className="w-28 h-28 sm:w-36 sm:h-36 rounded-full insta-story-gradient p-1 shadow-xl shadow-pink-500/10">
-            <div className="w-full h-full bg-neutral-950 rounded-full flex items-center justify-center font-bold text-4xl text-neutral-200 uppercase overflow-hidden">
-              {profile.avatarUrl ? (
-                <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" />
-              ) : (
-                profile.username?.charAt(0) || 'U'
-              )}
+          <div
+            onClick={() => {
+              if (storyGroup && storyGroup.stories?.length > 0) {
+                setIsStoryViewerOpen(true);
+              } else if (isSelf) {
+                avatarInputRef.current?.click();
+              }
+            }}
+            className={`w-28 h-28 sm:w-36 sm:h-36 rounded-full p-1 transition ${
+              storyGroup && storyGroup.stories?.length > 0
+                ? storyGroup.hasCloseFriends
+                  ? 'bg-gradient-to-tr from-emerald-500 to-green-400 shadow-xl shadow-emerald-500/20 cursor-pointer hover:scale-105'
+                  : 'insta-story-gradient shadow-xl shadow-pink-500/20 cursor-pointer hover:scale-105'
+                : 'bg-neutral-800'
+            }`}
+            title={storyGroup && storyGroup.stories?.length > 0 ? 'Click to view story' : isSelf ? 'Click to upload photo' : ''}
+          >
+            <div className="w-full h-full bg-neutral-950 rounded-full flex items-center justify-center font-bold text-4xl text-neutral-200 uppercase overflow-hidden p-0.5">
+              <div className="w-full h-full bg-neutral-800 rounded-full flex items-center justify-center overflow-hidden">
+                {profile.avatarUrl ? (
+                  <img src={profile.avatarUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  profile.username?.charAt(0) || 'U'
+                )}
+              </div>
             </div>
           </div>
 
+          {/* Change Avatar Button for Own Profile */}
           {isSelf && (
-            <div
-              onClick={() => avatarInputRef.current?.click()}
-              className="absolute inset-0 rounded-full bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center gap-1 text-white cursor-pointer transition"
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                avatarInputRef.current?.click();
+              }}
+              title="Change profile picture"
+              className="absolute bottom-1 right-1 p-2 rounded-full bg-neutral-900 border-2 border-neutral-800 hover:border-pink-500 text-neutral-200 hover:text-white shadow-lg transition active:scale-95"
             >
               {uploadingAvatar ? (
-                <Loader2 className="w-6 h-6 animate-spin text-pink-400" />
+                <Loader2 className="w-4 h-4 animate-spin text-pink-400" />
               ) : (
-                <>
-                  <Camera className="w-6 h-6" />
-                  <span className="text-[10px] font-semibold">Change</span>
-                </>
+                <Camera className="w-4 h-4" />
               )}
-            </div>
+            </button>
           )}
+
           <input
             ref={avatarInputRef}
             type="file"
@@ -489,6 +539,18 @@ export default function ProfilePage({ username: propUsername, onOpenSettings, on
           isOpen={!!selectedPostId}
           onClose={() => setSelectedPostId(null)}
           onPostDeleted={(id) => setPosts((prev) => prev.filter((p) => p._id !== id))}
+        />
+      )}
+
+      {/* Story Viewer Modal */}
+      {isStoryViewerOpen && storyGroup && (
+        <StoryViewerModal
+          storyGroup={storyGroup}
+          isOpen={isStoryViewerOpen}
+          onClose={() => {
+            setIsStoryViewerOpen(false);
+            if (profile?._id) fetchUserStories(profile._id);
+          }}
         />
       )}
     </div>

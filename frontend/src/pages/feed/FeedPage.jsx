@@ -17,7 +17,7 @@ export default function FeedPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [selectedPostId, setSelectedPostId] = useState(null);
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [createModalState, setCreateModalState] = useState({ isOpen: false, mode: 'post', lockMode: false });
   const [suggestions, setSuggestions] = useState([]);
 
   const fetchFeed = async (pageNum = 1) => {
@@ -90,7 +90,7 @@ export default function FeedPage() {
       {/* Left / Center Feed Stream */}
       <div className="w-full max-w-xl">
         {/* Story Tray */}
-        <StoryTray onOpenCreateStory={() => setIsCreateOpen(true)} />
+        <StoryTray onOpenCreateStory={() => setCreateModalState({ isOpen: true, mode: 'story', lockMode: true })} />
 
         {/* Posts Stream */}
         {loading ? (
@@ -226,10 +226,12 @@ export default function FeedPage() {
       )}
 
       {/* Create Modal */}
-      {isCreateOpen && (
+      {createModalState.isOpen && (
         <CreateModal
-          isOpen={isCreateOpen}
-          onClose={() => setIsCreateOpen(false)}
+          isOpen={createModalState.isOpen}
+          initialMode={createModalState.mode}
+          lockMode={createModalState.lockMode}
+          onClose={() => setCreateModalState((prev) => ({ ...prev, isOpen: false }))}
           onCreated={() => fetchFeed(1)}
         />
       )}

@@ -341,6 +341,69 @@ export const getStoryById = async (req, res, next) => {
   }
 };
 
+// GET /api/stories/user/:userId
+export const getUserActiveStories = async (req, res, next) => {
+  try {
+    const { userId } = req.params;
+    let targetUser = null;
+    if (userId.match(/^[0-9a-fA-F]{24}$/)) {
+      targetUser = await User.findById(userId).select('username fullName avatarUrl isVerified isPrivate closeFriends blockedUsers');
+    }
+    if (!targetUser) {
+      targetUser = await User.findOne({ username: userId }).select('username fullName avatarUrl isVerified isPrivate closeFriends blockedUsers');
+    }
+    if (!targetUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    const now = new Date();
+    const isSelf = targetUser._id.equals(req.user._id);
+
+    // Blocking check
+    if (
+      targetUser.blockedUsers?.some((bId) => bId.equals(req.user._id)) ||
+      req.user.blockedUsers?.some((bId) => bId.equals(targetUser._id))
+    ) {
+      return res.status(403).json({ success: false, message: 'User not accessible' });
+    }
+
+    const activeStories = await Story.find({
+      author: targetUser._id,
+      expiresAt: { $gt: now }
+    })
+      .sort({ createdAt: 1 })
+      .populate('author', 'username fullName avatarUrl isVerified isPrivate closeFriends');
+
+    // Filter stories based on audience visibility
+    const visibleStories = activeStories.filter((story) => {
+      if (isSelf) return true;
+      if (story.audience === 'close_friends') {
+        return story.author.closeFriends?.some((cfId) => cfId.equals(req.user._id));
+      }
+      return true;
+    });
+
+    const hasUnviewed = visibleStories.some(
+      (s) => !s.viewers.some((v) => v.user.equals(req.user._id))
+    );
+
+    const group = {
+      author: targetUser,
+      stories: visibleStories,
+      hasUnviewed: !isSelf && hasUnviewed,
+      hasCloseFriends: visibleStories.some((s) => s.audience === 'close_friends'),
+      isSelf
+    };
+
+    return res.status(200).json({
+      success: true,
+      storyGroup: visibleStories.length > 0 ? group : null
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
 // Highlights Controllers
 export const createHighlight = async (req, res, next) => {
   try {

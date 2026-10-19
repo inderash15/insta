@@ -280,4 +280,52 @@ describe('Project Aurora — Stories & Notes Lifecycle Integration Tests', () =>
     const trayAfterDel = await request(app).get('/api/notes/tray').set('Cookie', bob.cookie);
     expect(trayAfterDel.body.notes.some((n) => n._id === noteId)).toBe(false);
   });
+
+  it('5. Stories: User active stories API (GET /api/stories/user/:userId) correctly returns active stories for profile display', async () => {
+    const dave = await registerHelper({
+      username: 'dave',
+      email: 'dave@example.com',
+      password: 'password123',
+      fullName: 'Dave Miller'
+    });
+
+    const emma = await registerHelper({
+      username: 'emma',
+      email: 'emma@example.com',
+      password: 'password123',
+      fullName: 'Emma Watson'
+    });
+
+    // Dave creates a story
+    const fakeImageBuffer = Buffer.from('fake image content');
+    await request(app)
+      .post('/api/stories')
+      .set('Cookie', dave.cookie)
+      .attach('media', fakeImageBuffer, 'story_dave.jpg')
+      .field('audience', 'everyone')
+      .field('caption', 'Dave profile story');
+
+    // Emma queries Dave active stories by user ID
+    const resById = await request(app)
+      .get(`/api/stories/user/${dave.user.id}`)
+      .set('Cookie', emma.cookie);
+    expect(resById.status).toBe(200);
+    expect(resById.body.success).toBe(true);
+    expect(resById.body.storyGroup).toBeDefined();
+    expect(resById.body.storyGroup.stories.length).toBe(1);
+    expect(resById.body.storyGroup.stories[0].caption).toBe('Dave profile story');
+
+    // Emma queries Dave active stories by username
+    const resByUsername = await request(app)
+      .get('/api/stories/user/dave')
+      .set('Cookie', emma.cookie);
+    expect(resByUsername.status).toBe(200);
+    expect(resByUsername.body.storyGroup.stories.length).toBe(1);
+
+    // Query non-existent user returns 404
+    const resNotFound = await request(app)
+      .get('/api/stories/user/nonexistent_user')
+      .set('Cookie', emma.cookie);
+    expect(resNotFound.status).toBe(404);
+  });
 });
