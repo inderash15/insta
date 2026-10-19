@@ -85,7 +85,10 @@ export default function MessagesPage() {
 
     const handleNewMessage = ({ conversationId, message }) => {
       if (activeConv && activeConv._id === conversationId) {
-        setMessages((prev) => [...prev, message]);
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === message._id)) return prev;
+          return [...prev, message];
+        });
         api.post(`/conversations/${conversationId}/read`).catch(() => {});
       }
 
@@ -176,8 +179,11 @@ export default function MessagesPage() {
       const res = await api.post(`/conversations/${activeConv._id}/messages`, {
         text: textToSend
       });
-      if (res.data?.success) {
-        setMessages((prev) => [...prev, res.data.message]);
+      if (res.data?.success && res.data.message) {
+        setMessages((prev) => {
+          if (prev.some((m) => m._id === res.data.message._id)) return prev;
+          return [...prev, res.data.message];
+        });
       }
     } catch (err) {
       alert(err.message || 'Failed to send message');
@@ -379,36 +385,50 @@ export default function MessagesPage() {
               })()}
 
               {/* Messages Body */}
-              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              <div className="flex-1 overflow-y-auto px-4 py-3 space-y-0.5 no-scrollbar bg-black">
                 {loadingMsgs ? (
-                  <div className="py-12 flex justify-center">
-                    <Loader2 className="w-6 h-6 text-pink-500 animate-spin" />
+                  <div className="h-full flex items-center justify-center">
+                    <Loader2 className="w-6 h-6 text-neutral-500 animate-spin" />
                   </div>
                 ) : (
-                  messages.map((m) => {
-                    const isSelf = (m.sender?._id || m.sender?.id) === (user?._id || user?.id);
+                  messages.map((m, idx) => {
+                    const currentUserId = user?._id || user?.id;
+                    const senderId = m.sender?._id || m.sender?.id || m.sender;
+                    const isSelf = senderId === currentUserId;
+
+                    const prevMsg = messages[idx - 1];
+                    const nextMsg = messages[idx + 1];
+
+                    const prevSender = prevMsg ? (prevMsg.sender?._id || prevMsg.sender?.id || prevMsg.sender) : null;
+                    const nextSender = nextMsg ? (nextMsg.sender?._id || nextMsg.sender?.id || nextMsg.sender) : null;
+
+                    const isSameSenderAsPrev = prevSender === senderId;
+                    const isSameSenderAsNext = nextSender === senderId;
+
                     return (
                       <div
-                        key={m._id}
-                        className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'}`}
+                        key={m._id || `m-${idx}`}
+                        className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'} ${
+                          isSameSenderAsPrev ? 'mt-0.5' : 'mt-2.5'
+                        }`}
                       >
-                        <div
-                          className={`max-w-[75%] rounded-2xl px-4 py-2.5 text-xs ${
-                            isSelf
-                              ? 'bg-gradient-to-r from-pink-600 to-purple-600 text-white rounded-br-sm'
-                              : 'bg-neutral-800 text-neutral-200 rounded-bl-sm'
-                          }`}
-                        >
-                          {m.mediaUrl && (
-                            <div className="mb-2 rounded-lg overflow-hidden">
-                              <img src={m.mediaUrl} alt="" className="max-h-60 w-auto object-cover" />
-                            </div>
-                          )}
-                          <p className="leading-relaxed">{m.text}</p>
+                        <div className="relative max-w-[70%] sm:max-w-[65%] flex flex-col">
+                          <div
+                            className={`px-4 py-2 text-[14px] leading-5 select-text break-words rounded-[20px] ${
+                              isSelf
+                                ? 'bg-gradient-to-r from-[#7000ff] via-[#9400d3] to-[#c800ff] text-white rounded-br-[4px]'
+                                : 'bg-[#262626] text-white rounded-bl-[4px]'
+                            }`}
+                            title={new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
+                          >
+                            {m.mediaUrl && (
+                              <div className="mb-1.5 rounded-xl overflow-hidden bg-black/40">
+                                <img src={m.mediaUrl} alt="" className="max-h-60 w-auto object-cover rounded-lg" />
+                              </div>
+                            )}
+                            <p className={`${m.text === '❤️' ? 'text-2xl py-0.5' : ''}`}>{m.text}</p>
+                          </div>
                         </div>
-                        <span className="text-[9px] text-neutral-500 mt-1 px-1">
-                          {new Date(m.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </span>
                       </div>
                     );
                   })
@@ -416,7 +436,7 @@ export default function MessagesPage() {
 
                 {/* Typing indicator */}
                 {typingUser && (
-                  <div className="text-[11px] text-neutral-400 italic flex items-center gap-1.5 pl-2">
+                  <div className="text-[11px] text-neutral-400 italic flex items-center gap-1.5 pl-2 py-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-pink-500 animate-bounce" />
                     <span>{typingUser} is typing...</span>
                   </div>
@@ -424,24 +444,56 @@ export default function MessagesPage() {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Chat Input Bar */}
-              <form onSubmit={handleSendMessage} className="p-3 border-t border-neutral-800 bg-neutral-900/60 flex items-center gap-2">
-                <input
-                  type="text"
-                  value={messageText}
-                  onChange={handleInputChange}
-                  placeholder="Message..."
-                  maxLength={1000}
-                  className="flex-1 bg-neutral-950 border border-neutral-800 rounded-xl px-4 py-2.5 text-xs text-neutral-100 placeholder-neutral-500 focus:outline-none focus:border-pink-500 transition"
-                />
-                <button
-                  type="submit"
-                  disabled={!messageText.trim()}
-                  className="p-2.5 rounded-xl text-white insta-story-gradient hover:opacity-90 active:scale-95 transition disabled:opacity-30 disabled:cursor-not-allowed shadow-md shadow-pink-500/20"
-                >
-                  <Send className="w-4 h-4" />
-                </button>
-              </form>
+              {/* Instagram Style Input Bar */}
+              <div className="p-3 bg-black border-t border-neutral-800/80">
+                <form onSubmit={handleSendMessage} className="w-full min-h-[44px] bg-[#262626] border border-neutral-700/60 rounded-full px-4 py-1.5 flex items-center gap-3 focus-within:border-neutral-500 transition">
+                  <button
+                    type="button"
+                    onClick={() => setMessageText((prev) => prev + ' 😊')}
+                    className="text-white/80 hover:text-white transition cursor-pointer shrink-0"
+                    title="Emoji"
+                  >
+                    <Smile className="w-6 h-6 stroke-[1.8]" />
+                  </button>
+
+                  <input
+                    type="text"
+                    value={messageText}
+                    onChange={handleInputChange}
+                    placeholder="Message..."
+                    maxLength={1000}
+                    className="flex-1 bg-transparent border-none text-white text-[14px] placeholder:text-neutral-500 focus:outline-none min-w-0 py-1"
+                  />
+
+                  {messageText.trim() ? (
+                    <button
+                      type="submit"
+                      className="text-[#0095f6] hover:text-white font-semibold text-[14px] px-1 cursor-pointer transition shrink-0"
+                    >
+                      Send
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-white/80">
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!activeConv) return;
+                          try {
+                            const res = await api.post(`/conversations/${activeConv._id}/messages`, { text: '❤️' });
+                            if (res.data?.success && res.data.message) {
+                              setMessages((prev) => prev.some((m) => m._id === res.data.message._id) ? prev : [...prev, res.data.message]);
+                            }
+                          } catch {}
+                        }}
+                        className="hover:text-red-500 active:scale-125 transition-transform cursor-pointer shrink-0"
+                        title="Send heart"
+                      >
+                        <Heart className="w-5 h-5 stroke-[1.8] hover:fill-red-500 hover:text-red-500 transition-colors" />
+                      </button>
+                    </div>
+                  )}
+                </form>
+              </div>
             </>
           )}
         </div>
