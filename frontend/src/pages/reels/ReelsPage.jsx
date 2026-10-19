@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import api from '../../services/api';
 import ReelsNav from '../../components/reels/ReelsNav';
+import PulseRankExplainModal from '../../components/reels/PulseRankExplainModal';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 
@@ -24,6 +25,7 @@ export default function ReelsPage() {
   const [activeReelIndex, setActiveReelIndex] = useState(0);
   const [isMuted, setIsMuted] = useState(true);
   const [showCommentsForReel, setShowCommentsForReel] = useState(null);
+  const [explainReel, setExplainReel] = useState(null);
   const [reelComments, setReelComments] = useState([]);
   const [newReelComment, setNewReelComment] = useState('');
   const [submittingReelComment, setSubmittingReelComment] = useState(false);
@@ -243,6 +245,18 @@ export default function ReelsPage() {
                   )}
                 </button>
 
+                {/* PulseRank Explain Button */}
+                <button
+                  onClick={() => setExplainReel(reel)}
+                  className="flex flex-col items-center gap-1 group active:scale-90 transition"
+                  title="Why am I seeing this?"
+                >
+                  <div className="p-2.5 rounded-full bg-black/40 backdrop-blur border border-purple-500/30 group-hover:bg-purple-900/40 transition text-purple-400">
+                    <Sparkles className="w-5 h-5" />
+                  </div>
+                  <span className="text-[10px] font-semibold text-purple-300 drop-shadow">PulseRank</span>
+                </button>
+
                 {/* Spinning Audio Disk */}
                 <div className="w-9 h-9 rounded-full bg-neutral-900 border-2 border-white/30 p-1 flex items-center justify-center animate-spin" style={{ animationDuration: '4s' }}>
                   <Music className="w-4 h-4 text-pink-400" />
@@ -328,6 +342,16 @@ export default function ReelsPage() {
           ))}
         </div>
       )}
+
+      {/* PulseRank Explain & Feedback Modal */}
+      <PulseRankExplainModal
+        reel={explainReel}
+        isOpen={!!explainReel}
+        onClose={() => setExplainReel(null)}
+        onFeedbackApplied={(reelId) => {
+          setReels((prev) => prev.filter((r) => r._id !== reelId));
+        }}
+      />
     </div>
   );
 }

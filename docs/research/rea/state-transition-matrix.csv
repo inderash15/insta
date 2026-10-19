@@ -1,0 +1,27 @@
+entity,initial_state,event_trigger,guard_conditions,terminal_state,side_effects,socket_broadcast
+Story,Draft,Upload_Completed,File size < 50MB & Valid mediaType,Published,Schedule 24h expiration,story:published
+Story,Published,Timer_5000ms,Active index < total stories,Next_Segment,Auto-advance progress bar,none
+Story,Published,Tap_Right,Active index < total stories,Next_Segment,Cancel timer and reset for next,none
+Story,Published,Tap_Left,Active index > 0,Prev_Segment,Reset timer to 0,none
+Story,Published,Press_Hold,User holding viewport,Paused,Halt progress interval,none
+Story,Published,Release_Hold,User releases viewport,Playing,Resume progress interval,none
+Story,Published,View_Triggered,Viewer != Author & !AlreadyViewed,Viewed,Persist viewer record to DB,story:viewed
+Story,Published,TTL_24h_Elapsed,now() >= expiresAt,Expired,Hide from feed query and socket tray,story:expired
+Note,Empty,Create_Submitted,Length <= 60 chars & Valid audience,Active,Save with 24h expiration,note:created
+Note,Active,Delete_Requested,User == Author,Deleted,Remove note from DB,note:deleted
+Note,Active,TTL_24h_Elapsed,now() >= expiresAt,Expired,Omit from notes tray,none
+Note,Active,Reply_Submitted,Viewer authorized & text not empty,Replied,Create direct message with note context,message:created
+Reel,Unwatched,Viewport_Intersection_50pct,Time in viewport > 1s,Impression,Log impression telemetry event,none
+Reel,Impression,Watch_Progress_5s,Client heartbeat emitted,Watching,Update watch duration feature,none
+Reel,Watching,Watch_Completed,Playback >= 90pct duration,Completed,Increment completion counter & affinity,none
+Reel,Watching,Watch_Looped,Playback resets to 0 with replay,Replayed,Boost creator and topic affinity,none
+Reel,Watching,Skip_Triggered,Duration < 3s & Swiped away,Skipped,Log negative skip penalty in PulseRank,none
+Reel,Watching,Not_Interested_Clicked,User explicitly requests hide,Hidden,Immediate candidate suppression & negative feedback,none
+Post,Unliked,Like_Clicked,Viewer authorized,Liked,Persist like, atomic count + 1,post:liked
+Post,Liked,Unlike_Clicked,Viewer was liked,Unliked,Remove like, atomic count - 1,post:unliked
+User_Relationship,None,Follow_Clicked,Target user is public,Following,Create Follow record, increment counts,user:followed
+User_Relationship,None,Follow_Clicked,Target user is private,Requested,Create pending request record,notification:follow_request
+User_Relationship,Following,Unfollow_Clicked,Target user is followed,None,Delete Follow record, decrement counts,user:unfollowed
+Message,Draft,Send_Clicked,Valid text or media & Not blocked,Sent,Create message record in conversation,message:created
+Message,Sent,Recipient_Online,Recipient socket connected,Delivered,Update deliveredAt, emit receipt,message:delivered
+Message,Delivered,Recipient_Opened,Recipient views thread,Seen,Update seenAt, emit receipt,message:seen

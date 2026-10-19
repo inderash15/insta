@@ -17,6 +17,7 @@ import api from '../../services/api';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import DirectNav from '../../components/messages/DirectNav';
+import NotesTray from '../../components/notes/NotesTray';
 
 export default function MessagesPage() {
   const { user } = useAuth();
@@ -421,6 +422,11 @@ export default function MessagesPage() {
             </button>
           </div>
 
+          {/* Social Notes Horizontal Tray */}
+          <div className="px-3 pt-3">
+            <NotesTray />
+          </div>
+
           {/* Conversations List */}
           <div className="flex-1 overflow-y-auto divide-y divide-neutral-800/40">
             {loadingConv ? (
@@ -601,6 +607,27 @@ export default function MessagesPage() {
                             }`}
                             title={new Date(m.createdAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}
                           >
+                            {/* Story Reply Context Quote */}
+                            {m.storyReply?.mediaUrl && (
+                              <div className="mb-2 p-2 rounded-xl bg-black/30 border border-white/10 flex items-center gap-2">
+                                <div className="w-10 h-10 rounded-lg overflow-hidden bg-black/50 shrink-0">
+                                  {m.storyReply.mediaType === 'video' ? (
+                                    <video src={m.storyReply.mediaUrl} className="w-full h-full object-cover" />
+                                  ) : (
+                                    <img src={m.storyReply.mediaUrl} alt="" className="w-full h-full object-cover" />
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-white/80 italic">Replied to story</span>
+                              </div>
+                            )}
+
+                            {/* Note Reply Context Quote */}
+                            {m.noteReply?.text && (
+                              <div className="mb-2 p-2 rounded-xl bg-black/30 border border-white/10 flex items-center gap-2">
+                                <span className="text-[11px] text-white/80 italic">Replied to note: "{m.noteReply.text}"</span>
+                              </div>
+                            )}
+
                             {m.mediaUrl && (
                               <div className="mb-1.5 rounded-xl overflow-hidden bg-black/40">
                                 <img src={m.mediaUrl} alt="" className="max-h-60 w-auto object-cover rounded-lg" />

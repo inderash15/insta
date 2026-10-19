@@ -1,0 +1,26 @@
+interaction_id,feature_area,trigger_element,trigger_event,expected_transition,socket_broadcast_event,optimistic_update,error_rollback,confidence_level
+IX-001,Feed,Like Button,Click / Double Tap,Heart animates to red + count increments by 1,post:liked,yes,yes,verified
+IX-002,Feed,Unlike Button,Click,Heart reverts to outline + count decrements by 1,post:unliked,yes,yes,verified
+IX-003,Feed,Bookmark Button,Click,Ribbon icon fills + toast notification,none (private),yes,yes,verified
+IX-004,Feed,Comment Input,Submit (Enter or Post btn),Comment inserted into thread + count increments,post:commented,yes,yes,verified
+IX-005,Stories,Story Tray Item,Click,Opens Story Viewer modal at author index,none,yes,no,verified
+IX-006,Stories,Story Progress Bar,Timer Tick,Progress bar advances proportionally over 5s,none,yes,no,verified
+IX-007,Stories,Story Tap Right,Click / Tap Right 50%,Advances to next segment or next author story,none,yes,no,verified
+IX-008,Stories,Story Tap Left,Click / Tap Left 50%,Goes to previous segment or previous author,none,yes,no,verified
+IX-009,Stories,Story Press & Hold,MouseDown / TouchStart,Pauses segment timer and hides overlays,none,yes,no,verified
+IX-010,Stories,Story Quick Reaction,Click Emoji,Sends animated emoji float + registers reaction,story:reacted,yes,yes,verified
+IX-011,Stories,Story Reply Box,Send Message,Sends direct message linked to story context,message:created,yes,yes,verified
+IX-012,Stories,Viewer List Button,Click,Displays real viewer avatars and timestamps (author only),none,yes,no,verified
+IX-013,Notes,Notes Bubble Add,Click,Opens Note Creator dialog with 60-char counter,none,yes,no,verified
+IX-014,Notes,Note Publish,Click Share,Note bubble appears over user avatar for 24 hours,note:created,yes,yes,verified
+IX-015,Notes,Note Bubble Click,Click / Tap,Opens Note Reply bottom sheet / modal,none,yes,no,verified
+IX-016,Notes,Note Delete,Click Delete,Removes active note immediately,note:deleted,yes,yes,verified
+IX-017,Reels,Scroll / Arrow Down,Keydown / Wheel / Swipe,Smooth snaps to next recommendation candidate,none,yes,no,verified
+IX-018,Reels,Like Reel,Click / Double Tap,Fills heart icon + sends telemetry signal,reel:liked,yes,yes,verified
+IX-019,Reels,Not Interested Control,Click Menu -> Not Interested,Hides video + applies negative feedback to PulseRank,none,yes,yes,verified
+IX-020,Reels,Why Am I Seeing This,Click Menu -> Why Seeing This,Opens explainability modal with ranked features,none,yes,no,verified
+IX-021,Direct,Message Input,Typing,Emits typing indicator to recipient conversation,typing:start,yes,no,verified
+IX-022,Direct,Message Send,Submit,Optimistically renders bubble, sends, marks delivered,message:created,yes,yes,verified
+IX-023,Direct,Conversation Open,Focus / Scroll,Sends read receipts for unread inbound messages,message:seen,yes,no,verified
+IX-024,Social,Follow Button,Click,Switches to 'Following' or 'Requested' (if private),user:followed,yes,yes,verified
+IX-025,Social,Unfollow Button,Click,Switches back to 'Follow' button,user:unfollowed,yes,yes,verified

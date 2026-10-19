@@ -81,6 +81,25 @@ const userSchema = new mongoose.Schema(
         ref: 'User'
       }
     ],
+    closeFriends: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    ],
+    interests: [
+      {
+        type: String,
+        lowercase: true,
+        trim: true
+      }
+    ],
+    hiddenCreators: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      }
+    ],
     preferences: {
       theme: { type: String, default: 'dark', enum: ['dark', 'light', 'system'] },
       notifications: {

@@ -51,6 +51,22 @@ const storySchema = new mongoose.Schema(
       enum: ['image', 'video'],
       required: true
     },
+    caption: {
+      type: String,
+      default: '',
+      maxlength: [300, 'Story caption cannot exceed 300 characters'],
+      trim: true
+    },
+    audience: {
+      type: String,
+      enum: ['everyone', 'close_friends'],
+      default: 'everyone',
+      index: true
+    },
+    dimensions: {
+      width: { type: Number, default: 1080 },
+      height: { type: Number, default: 1920 }
+    },
     viewers: [viewerSchema],
     reactions: [reactionSchema],
     expiresAt: {

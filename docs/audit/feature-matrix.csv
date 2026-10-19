@@ -1,0 +1,26 @@
+feature_id,feature_name,category,implementation_status,realtime_synced,zero_reload,test_coverage_status,notes
+FT-001,User Registration & Login,Authentication,Implemented,yes,yes,verified,HttpOnly session cookies with JWT
+FT-002,Feed Post Creation & Rendering,Feed,Implemented,yes,yes,verified,Media upload with hashtags and mentions
+FT-003,Post Likes & Unlikes,Interactions,Implemented,yes,yes,verified,Atomic duplicate-key protection and count syncing
+FT-004,Post Comments & Deletion,Interactions,Implemented,yes,yes,verified,Real-time comment injection and count sync
+FT-005,Post Bookmarks & Collections,Saved,Implemented,yes,yes,verified,Private bookmarking and collections management
+FT-006,Stories Tray & Segmented Viewer,Stories,Implemented,yes,yes,verified,5s progress bar with pause on hold
+FT-007,Stories Close Friends Audience,Stories,Implemented,yes,yes,verified,Strict privacy filtering on server and tray
+FT-008,Story Direct Replies to DM,Stories,Implemented,yes,yes,verified,Routes directly into direct messaging with preview card
+FT-009,Story Viewer List Analytics,Stories,Implemented,yes,yes,verified,Author-only verification with real timestamps
+FT-010,Story Highlights on Profile,Stories,Implemented,yes,yes,verified,Custom highlight collections with covers
+FT-011,Notes Tray with 60-Char Limit,Notes,Implemented,yes,yes,verified,Server and client character limit enforcement
+FT-012,Notes Audience Filtering,Notes,Implemented,yes,yes,verified,Mutual followers & Close Friends support
+FT-013,Note DM Replies & Deletion,Notes,Implemented,yes,yes,verified,Direct message context integration
+FT-014,PulseRank Candidate Retrieval,Reels,Implemented,yes,yes,verified,Multi-pool candidate generation (social, topics, emerging)
+FT-015,PulseRank Safety & Privacy Filter,Reels,Implemented,yes,yes,verified,Strict exclusion of blocked, hidden, and not-interested
+FT-016,PulseRank Multi-Objective Scoring,Reels,Implemented,yes,yes,verified,Mathematical scoring formula with configurable weights
+FT-017,PulseRank Diversity Reranker,Reels,Implemented,yes,yes,verified,Limits consecutive videos from same creator (max 2)
+FT-018,PulseRank Watch Telemetry,Reels,Implemented,yes,yes,verified,Watch duration logging with client bounding
+FT-019,PulseRank Feed Controls,Reels,Implemented,yes,yes,verified,Not Interested and Hide Creator controls
+FT-020,PulseRank Why Am I Seeing This,Reels,Implemented,yes,yes,verified,Transparent explainability breakdown
+FT-021,Direct Messaging Thread,Chat,Implemented,yes,yes,verified,Real-time message transmission via Socket.IO
+FT-022,Direct Message Read Receipts,Chat,Implemented,yes,yes,verified,Sent Delivered and Seen statuses
+FT-023,Typing Indicators,Chat,Implemented,yes,yes,verified,Real-time typing bubbles with 2s timeout
+FT-024,User Online Presence,Presence,Implemented,yes,yes,verified,Multi-tab presence with lastActiveAt
+FT-025,Social Graph Follow/Unfollow,Social,Implemented,yes,yes,verified,Atomic counter synchronization and private requests

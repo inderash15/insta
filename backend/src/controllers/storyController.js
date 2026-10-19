@@ -1,6 +1,9 @@
 import { Story } from '../models/Story.js';
 import { Follow } from '../models/Follow.js';
 import { User } from '../models/User.js';
+import { Conversation } from '../models/Conversation.js';
+import { Message } from '../models/Message.js';
+import { Highlight } from '../models/Highlight.js';
 import { getIO } from '../config/socket.js';
 
 // POST /api/stories
@@ -13,15 +16,19 @@ export const createStory = async (req, res, next) => {
     const mediaUrl = `/uploads/stories/${req.file.filename}`;
     const mediaType = req.file.mimetype.startsWith('video') ? 'video' : 'image';
     const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours from now
+    const audience = req.body.audience === 'close_friends' ? 'close_friends' : 'everyone';
+    const caption = req.body.caption ? String(req.body.caption).trim().slice(0, 300) : '';
 
     const story = await Story.create({
       author: req.user._id,
       mediaUrl,
       mediaType,
+      audience,
+      caption,
       expiresAt
     });
 
-    await story.populate('author', 'username fullName avatarUrl isVerified');
+    await story.populate('author', 'username fullName avatarUrl isVerified closeFriends');
 
     try {
       const io = getIO();
@@ -58,19 +65,32 @@ export const getStoryTray = async (req, res, next) => {
       expiresAt: { $gt: now }
     })
       .sort({ createdAt: 1 })
-      .populate('author', 'username fullName avatarUrl isVerified isPrivate');
+      .populate('author', 'username fullName avatarUrl isVerified isPrivate closeFriends');
 
-    // Group stories by author
+    // Group stories by author while enforcing audience visibility
     const groupsMap = new Map();
 
     for (const story of activeStories) {
+      const isSelf = story.author._id.equals(req.user._id);
+
+      // If story is close_friends, only author or approved close friends can view
+      if (story.audience === 'close_friends' && !isSelf) {
+        const isCloseFriend = story.author.closeFriends?.some((cfId) =>
+          cfId.equals(req.user._id)
+        );
+        if (!isCloseFriend) {
+          continue; // Skip this story for viewer
+        }
+      }
+
       const authorId = story.author._id.toString();
       if (!groupsMap.has(authorId)) {
         groupsMap.set(authorId, {
           author: story.author,
           stories: [],
           hasUnviewed: false,
-          isSelf: story.author._id.equals(req.user._id)
+          hasCloseFriends: false,
+          isSelf
         });
       }
 
@@ -78,6 +98,9 @@ export const getStoryTray = async (req, res, next) => {
       const isViewed = story.viewers.some((v) => v.user.equals(req.user._id));
       if (!isViewed && !group.isSelf) {
         group.hasUnviewed = true;
+      }
+      if (story.audience === 'close_friends') {
+        group.hasCloseFriends = true;
       }
       group.stories.push(story);
     }
@@ -151,10 +174,100 @@ export const reactToStory = async (req, res, next) => {
     story.reactions.push({ user: req.user._id, emoji, createdAt: new Date() });
     await story.save();
 
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`user:${story.author.toString()}`).emit('story:reaction', {
+          storyId: story._id,
+          emoji,
+          user: req.user._id
+        });
+      }
+    } catch (e) {}
+
     return res.status(200).json({
       success: true,
       message: 'Reaction recorded',
       reactionsCount: story.reactions.length
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/stories/:id/reply
+export const replyToStory = async (req, res, next) => {
+  try {
+    const text = req.body.text?.trim();
+    if (!text) {
+      return res.status(400).json({ success: false, message: 'Reply text is required' });
+    }
+
+    const story = await Story.findById(req.params.id).populate('author');
+    if (!story) {
+      return res.status(404).json({ success: false, message: 'Story not found or expired' });
+    }
+
+    if (story.expiresAt <= new Date()) {
+      return res.status(410).json({ success: false, message: 'Story has expired' });
+    }
+
+    // Check blocking
+    if (story.author.blockedUsers?.some((bId) => bId.equals(req.user._id))) {
+      return res.status(403).json({ success: false, message: 'Cannot reply to this user' });
+    }
+
+    // Find or create conversation
+    let conversation = await Conversation.findOne({
+      participants: { $all: [req.user._id, story.author._id], $size: 2 }
+    });
+
+    if (!conversation) {
+      conversation = await Conversation.create({
+        participants: [req.user._id, story.author._id]
+      });
+    }
+
+    // Create message with storyReply context
+    const message = await Message.create({
+      conversation: conversation._id,
+      sender: req.user._id,
+      text,
+      storyReply: {
+        storyId: story._id,
+        mediaUrl: story.mediaUrl,
+        mediaType: story.mediaType
+      }
+    });
+
+    await message.populate('sender', 'username fullName avatarUrl');
+
+    // Update conversation metadata
+    conversation.lastMessage = message._id;
+    conversation.lastMessageAt = message.sentAt;
+    const authorIdStr = story.author._id.toString();
+    const currentUnread = conversation.unreadCounts.get(authorIdStr) || 0;
+    conversation.unreadCounts.set(authorIdStr, currentUnread + 1);
+    await conversation.save();
+
+    try {
+      const io = getIO();
+      if (io) {
+        io.to(`conversation:${conversation._id}`).emit('message:created', {
+          message,
+          conversationId: conversation._id
+        });
+        io.to(`user:${authorIdStr}`).emit('message:created', {
+          message,
+          conversationId: conversation._id
+        });
+      }
+    } catch (e) {}
+
+    return res.status(201).json({
+      success: true,
+      message: 'Reply sent successfully',
+      data: message
     });
   } catch (err) {
     next(err);
@@ -223,6 +336,65 @@ export const getStoryById = async (req, res, next) => {
       return res.status(404).json({ success: false, message: 'Story not found or expired' });
     }
     return res.status(200).json({ success: true, story });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// Highlights Controllers
+export const createHighlight = async (req, res, next) => {
+  try {
+    const { title, coverUrl, stories } = req.body;
+    if (!title?.trim()) {
+      return res.status(400).json({ success: false, message: 'Highlight title is required' });
+    }
+
+    const highlight = await Highlight.create({
+      user: req.user._id,
+      title: title.trim(),
+      coverUrl: coverUrl || '',
+      stories: stories || []
+    });
+
+    await highlight.populate('stories');
+
+    return res.status(201).json({
+      success: true,
+      highlight
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const getUserHighlights = async (req, res, next) => {
+  try {
+    const highlights = await Highlight.find({ user: req.params.userId })
+      .populate('stories')
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      highlights
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+export const deleteHighlight = async (req, res, next) => {
+  try {
+    const highlight = await Highlight.findById(req.params.id);
+    if (!highlight) {
+      return res.status(404).json({ success: false, message: 'Highlight not found' });
+    }
+
+    if (!highlight.user.equals(req.user._id) && req.user.role !== 'admin') {
+      return res.status(403).json({ success: false, message: 'Unauthorized' });
+    }
+
+    await Highlight.findByIdAndDelete(highlight._id);
+    return res.status(200).json({ success: true, message: 'Highlight deleted' });
   } catch (err) {
     next(err);
   }

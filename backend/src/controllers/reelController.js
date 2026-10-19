@@ -3,6 +3,8 @@ import { Like } from '../models/Like.js';
 import { User } from '../models/User.js';
 import { Follow } from '../models/Follow.js';
 import { Comment } from '../models/Comment.js';
+import { RecommendationEvent } from '../models/RecommendationEvent.js';
+import { getPulseRankReels } from '../services/pulserank/index.js';
 import { createNotification } from './notificationController.js';
 import { getIO } from '../config/socket.js';
 
@@ -58,6 +60,42 @@ export const getReels = async (req, res, next) => {
     const limit = Math.min(parseInt(req.query.limit, 10) || 10, 20);
     const filter = req.query.filter;
 
+    // Use PulseRank when filter is default / recommended and req.user exists
+    if (!filter || filter === 'recommended' || filter === 'pulserank') {
+      const pulseRankResult = await getPulseRankReels({
+        user: req.user,
+        page,
+        limit
+      });
+
+      // Enrich with isLiked status for authenticated user
+      let likedSet = new Set();
+      if (req.user && pulseRankResult.reels.length > 0) {
+        const reelIds = pulseRankResult.reels.map((r) => r._id);
+        const likes = await Like.find({
+          user: req.user._id,
+          targetType: 'reel',
+          targetId: { $in: reelIds }
+        });
+        likedSet = new Set(likes.map((l) => l.targetId.toString()));
+      }
+
+      const enrichedReels = pulseRankResult.reels.map((r) => ({
+        ...r,
+        id: r._id.toString(),
+        isLiked: likedSet.has(r._id.toString())
+      }));
+
+      return res.status(200).json({
+        success: true,
+        page,
+        engine: 'PulseRank-v1',
+        hasMore: pulseRankResult.reels.length === limit,
+        reels: enrichedReels
+      });
+    }
+
+    // Explicit Filter Fallbacks (following, trending)
     const blockedIds = req.user?.blockedUsers || [];
     let query = { author: { $nin: blockedIds } };
     let sort = { createdAt: -1 };
@@ -311,3 +349,192 @@ export const addReelComment = async (req, res, next) => {
     next(err);
   }
 };
+
+// POST /api/reels/:id/feedback
+export const recordReelFeedback = async (req, res, next) => {
+  try {
+    const { action, reason } = req.body;
+    const reel = await Reel.findById(req.params.id);
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
+    if (action === 'not_interested') {
+      await RecommendationEvent.create({
+        viewer: req.user._id,
+        reel: reel._id,
+        author: reel.author,
+        eventType: 'not_interested',
+        reason: reason || 'User marked not interested'
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Feedback recorded. We will recommend fewer videos like this.'
+      });
+    }
+
+    if (action === 'hide_creator') {
+      await User.findByIdAndUpdate(req.user._id, {
+        $addToSet: { hiddenCreators: reel.author }
+      });
+      return res.status(200).json({
+        success: true,
+        message: 'Creator hidden from your feed.'
+      });
+    }
+
+    if (action === 'reset_history') {
+      await RecommendationEvent.deleteMany({ viewer: req.user._id });
+      return res.status(200).json({
+        success: true,
+        message: 'Recommendation history reset successfully.'
+      });
+    }
+
+    return res.status(400).json({ success: false, message: 'Invalid feedback action' });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// POST /api/reels/:id/events
+export const recordReelEvent = async (req, res, next) => {
+  try {
+    const { eventType, watchDuration, completionRatio, sessionContext } = req.body;
+    const reel = await Reel.findById(req.params.id);
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
+    const validEvents = [
+      'impression',
+      'watch_progress',
+      'completion',
+      'replay',
+      'skip',
+      'like',
+      'comment',
+      'share',
+      'save'
+    ];
+    if (!validEvents.includes(eventType)) {
+      return res.status(400).json({ success: false, message: 'Invalid event type' });
+    }
+
+    // Bound watchDuration between 0 and 300 to prevent runaway fabricated numbers
+    const boundedDuration = Math.min(Math.max(parseFloat(watchDuration) || 0, 0), 300);
+    const boundedRatio = Math.min(Math.max(parseFloat(completionRatio) || 0, 0), 10);
+
+    const event = await RecommendationEvent.create({
+      viewer: req.user._id,
+      reel: reel._id,
+      author: reel.author,
+      eventType,
+      watchDuration: boundedDuration,
+      completionRatio: boundedRatio,
+      sessionContext: sessionContext || {}
+    });
+
+    return res.status(200).json({ success: true, eventId: event._id });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/reels/:id/explain
+export const explainReelRecommendation = async (req, res, next) => {
+  try {
+    const reel = await Reel.findById(req.params.id)
+      .populate('author', 'username fullName avatarUrl isVerified');
+    if (!reel) {
+      return res.status(404).json({ success: false, message: 'Reel not found' });
+    }
+
+    const isFollowing = await Follow.exists({
+      follower: req.user._id,
+      following: reel.author._id,
+      status: 'accepted'
+    });
+
+    const userInterests = req.user.interests || [];
+    const matchedInterests = (reel.hashtags || []).filter((tag) =>
+      userInterests.includes(tag.toLowerCase())
+    );
+
+    const reasons = [];
+    if (isFollowing) {
+      reasons.push(`Because you follow @${reel.author.username}`);
+    }
+    if (matchedInterests.length > 0) {
+      reasons.push(`Matched your interests: ${matchedInterests.map((t) => `#${t}`).join(', ')}`);
+    }
+    if ((reel.likesCount || 0) > 10) {
+      reasons.push('High engagement among viewers in Aurora');
+    }
+    if (reasons.length === 0) {
+      reasons.push('Curated for discovery based on community trends');
+    }
+
+    return res.status(200).json({
+      success: true,
+      reelId: reel._id,
+      engine: 'PulseRank-v1',
+      reasons,
+      factors: {
+        isFollowing: !!isFollowing,
+        matchedInterests,
+        viewsCount: reel.viewsCount,
+        likesCount: reel.likesCount
+      }
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// PUT /api/reels/preferences/interests
+export const updateUserInterests = async (req, res, next) => {
+  try {
+    const { interests } = req.body;
+    if (!Array.isArray(interests)) {
+      return res.status(400).json({ success: false, message: 'Interests must be an array of strings' });
+    }
+
+    const cleanInterests = [
+      ...new Set(
+        interests
+          .map((i) => String(i).trim().toLowerCase().replace(/^#/, ''))
+          .filter(Boolean)
+          .slice(0, 20)
+      )
+    ];
+
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id,
+      { interests: cleanInterests },
+      { new: true }
+    ).select('interests');
+
+    return res.status(200).json({
+      success: true,
+      message: 'Interests updated successfully',
+      interests: updatedUser.interests
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/reels/preferences/interests
+export const getUserInterests = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).select('interests');
+    return res.status(200).json({
+      success: true,
+      interests: user.interests || []
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

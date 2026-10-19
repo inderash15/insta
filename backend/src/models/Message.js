@@ -28,6 +28,21 @@ const messageSchema = new mongoose.Schema(
       enum: ['image', 'video', null],
       default: null
     },
+    storyReply: {
+      storyId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Story'
+      },
+      mediaUrl: { type: String, default: null },
+      mediaType: { type: String, default: null }
+    },
+    noteReply: {
+      noteId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Note'
+      },
+      text: { type: String, default: null }
+    },
     sentAt: {
       type: Date,
       default: Date.now
