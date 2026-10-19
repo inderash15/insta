@@ -13,7 +13,7 @@ export default function ExplorePeoplePage() {
     const fetchSuggestedPeople = async () => {
       setLoading(true);
       try {
-        const res = await api.get('/search/users?q=a&limit=30');
+        const res = await api.get('/explore/people?limit=30');
         if (res.data?.success) {
           setUsers(res.data.users || []);
         }

@@ -220,5 +220,45 @@ describe('Social Graph & Profiles API Tests', () => {
       .set('Cookie', userB.cookie);
 
     expect(hiddenProfileRes.status).toBe(404);
+
+    // Alice views her blocked users list
+    const blockedListRes = await request(app)
+      .get('/api/users/profile/blocked')
+      .set('Cookie', userA.cookie);
+    expect(blockedListRes.status).toBe(200);
+    expect(blockedListRes.body.success).toBe(true);
+    expect(blockedListRes.body.blockedUsers).toHaveLength(1);
+    expect(blockedListRes.body.blockedUsers[0].username).toBe('bob');
+  });
+
+  it('6. Fetches suggested people via /api/explore/people', async () => {
+    const userA = await registerHelper({
+      username: 'alice',
+      email: 'alice@example.com',
+      password: 'password123',
+      fullName: 'Alice Smith'
+    });
+
+    const userB = await registerHelper({
+      username: 'bob',
+      email: 'bob@example.com',
+      password: 'password123',
+      fullName: 'Bob Jones'
+    });
+
+    // Unauthenticated request
+    const publicRes = await request(app).get('/api/explore/people?limit=5');
+    expect(publicRes.status).toBe(200);
+    expect(publicRes.body.success).toBe(true);
+    expect(publicRes.body.users.length).toBeGreaterThanOrEqual(2);
+
+    // Authenticated request (excludes self)
+    const authRes = await request(app)
+      .get('/api/explore/people?limit=5')
+      .set('Cookie', userA.cookie);
+    expect(authRes.status).toBe(200);
+    expect(authRes.body.success).toBe(true);
+    expect(authRes.body.users.some(u => u.username === 'alice')).toBe(false);
+    expect(authRes.body.users.some(u => u.username === 'bob')).toBe(true);
   });
 });

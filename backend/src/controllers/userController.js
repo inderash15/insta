@@ -477,3 +477,19 @@ export const unblockUser = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/users/profile/blocked
+export const getBlockedUsers = async (req, res, next) => {
+  try {
+    const user = await User.findById(req.user._id).populate(
+      'blockedUsers',
+      'username fullName avatarUrl isVerified'
+    );
+    return res.status(200).json({
+      success: true,
+      blockedUsers: user?.blockedUsers || []
+    });
+  } catch (err) {
+    next(err);
+  }
+};

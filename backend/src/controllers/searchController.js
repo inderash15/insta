@@ -230,3 +230,58 @@ export const searchPlaces = async (req, res, next) => {
     next(err);
   }
 };
+
+// GET /api/explore/people
+export const getSuggestedPeople = async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 20, 50);
+
+    let excludedIds = [];
+    if (req.user) {
+      excludedIds.push(req.user._id);
+      if (req.user.blockedUsers?.length) {
+        excludedIds.push(...req.user.blockedUsers);
+      }
+      const existingFollows = await Follow.find({
+        follower: req.user._id
+      }).select('following');
+      excludedIds.push(...existingFollows.map((f) => f.following));
+    }
+
+    const query = excludedIds.length ? { _id: { $nin: excludedIds } } : {};
+
+    const users = await User.find(query)
+      .sort({ 'counts.followers': -1, createdAt: -1 })
+      .limit(limit)
+      .select('username fullName avatarUrl bio isVerified isPrivate counts');
+
+    return res.status(200).json({
+      success: true,
+      users
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+// GET /api/explore/trending-hashtags
+export const getTrendingHashtags = async (req, res, next) => {
+  try {
+    const limit = Math.min(parseInt(req.query.limit, 10) || 10, 30);
+    const results = await Post.aggregate([
+      { $match: { isArchived: false, hashtags: { $exists: true, $not: { $size: 0 } } } },
+      { $unwind: '$hashtags' },
+      { $group: { _id: '$hashtags', count: { $sum: 1 } } },
+      { $sort: { count: -1 } },
+      { $limit: limit },
+      { $project: { tag: '$_id', count: 1, _id: 0 } }
+    ]);
+
+    return res.status(200).json({
+      success: true,
+      hashtags: results
+    });
+  } catch (err) {
+    next(err);
+  }
+};
