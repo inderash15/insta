@@ -1,7 +1,7 @@
 import axios from 'axios';
 
-const rawApiUrl = import.meta.env.VITE_API_URL || '';
-const backendOrigin = rawApiUrl ? rawApiUrl.replace(/\/api\/?$/, '') : '';
+const rawApiUrl = (import.meta.env.VITE_API_URL || '').trim();
+const backendOrigin = rawApiUrl ? rawApiUrl.replace(/\/api\/?$/, '').trim() : '';
 const baseURL = rawApiUrl ? (rawApiUrl.endsWith('/api') ? rawApiUrl : `${backendOrigin}/api`) : '/api';
 
 export const getBackendOrigin = () => backendOrigin;
