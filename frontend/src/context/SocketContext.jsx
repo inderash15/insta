@@ -60,7 +60,13 @@ export const SocketProvider = ({ children }) => {
       import.meta.env.VITE_SOCKET_URL ||
       (import.meta.env.VITE_API_URL ? import.meta.env.VITE_API_URL.replace(/\/api\/?$/, '') : '/');
 
+    let token = null;
+    try {
+      token = localStorage.getItem('insta_token');
+    } catch {}
+
     const newSocket = io(socketEndpoint, {
+      auth: { token },
       withCredentials: true,
       transports: ['websocket', 'polling']
     });

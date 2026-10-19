@@ -36,6 +36,11 @@ export const AuthProvider = ({ children }) => {
     try {
       const res = await api.post('/auth/login', { identifier, password });
       if (res.data?.success && res.data?.user) {
+        if (res.data.token) {
+          try {
+            localStorage.setItem('insta_token', res.data.token);
+          } catch {}
+        }
         setUser(res.data.user);
         return { success: true, user: res.data.user };
       }
@@ -57,6 +62,11 @@ export const AuthProvider = ({ children }) => {
         fullName
       });
       if (res.data?.success && res.data?.user) {
+        if (res.data.token) {
+          try {
+            localStorage.setItem('insta_token', res.data.token);
+          } catch {}
+        }
         setUser(res.data.user);
         return { success: true, user: res.data.user };
       }
@@ -74,6 +84,9 @@ export const AuthProvider = ({ children }) => {
     } catch (err) {
       console.warn('Logout API notification error:', err.message);
     } finally {
+      try {
+        localStorage.removeItem('insta_token');
+      } catch {}
       setUser(null);
       setAuthError(null);
     }

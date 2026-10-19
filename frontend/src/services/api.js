@@ -23,6 +23,20 @@ const api = axios.create({
   }
 });
 
+// Request interceptor to attach Bearer token when available
+api.interceptors.request.use(
+  (config) => {
+    try {
+      const token = localStorage.getItem('insta_token');
+      if (token) {
+        config.headers.Authorization = `Bearer ${token}`;
+      }
+    } catch {}
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
 // Recursively prefix /uploads/ in response data when cross-origin backend is used
 const prefixUploads = (data) => {
   if (!backendOrigin || !data) return data;

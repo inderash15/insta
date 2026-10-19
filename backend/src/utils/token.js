@@ -12,9 +12,9 @@ export const verifyToken = (token) => {
 };
 
 export const getCookieOptions = () => {
-  const isProd = env.NODE_ENV === 'production';
-  const sameSite = env.COOKIE_SAMESITE || (isProd ? 'none' : 'lax');
-  const secure = env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE : (isProd || sameSite === 'none');
+  const isCloudOrProd = env.NODE_ENV === 'production' || !!process.env.RENDER || process.env.COOKIE_SAMESITE === 'none';
+  const sameSite = env.COOKIE_SAMESITE || (isCloudOrProd ? 'none' : 'lax');
+  const secure = env.COOKIE_SECURE !== undefined ? env.COOKIE_SECURE : (isCloudOrProd || sameSite === 'none');
 
   return {
     httpOnly: true,
