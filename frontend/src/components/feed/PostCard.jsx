@@ -110,7 +110,10 @@ export default function PostCard({ post: initialPost, onOpenComments, onPostDele
     };
   }, [socket, post?._id, user, onPostDeleted]);
 
+  const isLikingRef = React.useRef(false);
   const handleToggleLike = async () => {
+    if (isLikingRef.current) return;
+    isLikingRef.current = true;
     const prevLiked = post.isLiked;
     const prevCount = post.likesCount;
 
@@ -133,6 +136,8 @@ export default function PostCard({ post: initialPost, onOpenComments, onPostDele
         isLiked: prevLiked,
         likesCount: prevCount
       }));
+    } finally {
+      isLikingRef.current = false;
     }
   };
 
@@ -144,7 +149,10 @@ export default function PostCard({ post: initialPost, onOpenComments, onPostDele
     }
   };
 
+  const isBookmarkingRef = React.useRef(false);
   const handleToggleBookmark = async () => {
+    if (isBookmarkingRef.current) return;
+    isBookmarkingRef.current = true;
     const prevBookmarked = post.isBookmarked;
     setPost({ ...post, isBookmarked: !prevBookmarked });
 
@@ -153,6 +161,8 @@ export default function PostCard({ post: initialPost, onOpenComments, onPostDele
       setPost((curr) => ({ ...curr, isBookmarked: res.data.bookmarked }));
     } catch {
       setPost((curr) => ({ ...curr, isBookmarked: prevBookmarked }));
+    } finally {
+      isBookmarkingRef.current = false;
     }
   };
 

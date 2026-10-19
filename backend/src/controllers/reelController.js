@@ -169,51 +169,55 @@ export const toggleLikeReel = async (req, res, next) => {
       targetId: reel._id
     });
 
+    let liked = false;
     if (existing) {
       await Like.findByIdAndDelete(existing._id);
-      const updated = await Reel.findByIdAndUpdate(
-        reel._id,
-        { $inc: { likesCount: -1 } },
-        { new: true }
-      );
-      const newCount = Math.max(0, updated.likesCount);
+      liked = false;
+    } else {
       try {
-        const io = getIO();
-        if (io) {
-          io.emit('reel:unliked', { reelId: reel._id, likesCount: newCount, userId: req.user._id });
+        await Like.create({
+          user: req.user._id,
+          targetType: 'reel',
+          targetId: reel._id
+        });
+        liked = true;
+      } catch (err) {
+        if (err.code === 11000) {
+          liked = true;
+        } else {
+          throw err;
         }
-      } catch (e) {}
-      return res.status(200).json({ success: true, liked: false, likesCount: newCount });
+      }
     }
 
-    await Like.create({
-      user: req.user._id,
+    const likesCount = await Like.countDocuments({
       targetType: 'reel',
       targetId: reel._id
     });
 
-    const updated = await Reel.findByIdAndUpdate(
-      reel._id,
-      { $inc: { likesCount: 1 } },
-      { new: true }
-    );
+    await Reel.findByIdAndUpdate(reel._id, { likesCount });
 
     try {
       const io = getIO();
       if (io) {
-        io.emit('reel:liked', { reelId: reel._id, likesCount: updated.likesCount, userId: req.user._id });
+        io.emit(liked ? 'reel:liked' : 'reel:unliked', {
+          reelId: reel._id,
+          likesCount,
+          userId: req.user._id
+        });
       }
     } catch (e) {}
 
-    // Notify author asynchronously
-    createNotification({
-      recipient: reel.author,
-      sender: req.user._id,
-      type: 'like_reel',
-      reel: reel._id
-    });
+    if (liked) {
+      createNotification({
+        recipient: reel.author,
+        sender: req.user._id,
+        type: 'like_reel',
+        reel: reel._id
+      });
+    }
 
-    return res.status(200).json({ success: true, liked: true, likesCount: updated.likesCount });
+    return res.status(200).json({ success: true, liked, likesCount });
   } catch (err) {
     next(err);
   }

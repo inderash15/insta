@@ -127,8 +127,10 @@ export default function PostDetailModal({ postId, isOpen, onClose, onPostDeleted
 
   if (!isOpen) return null;
 
+  const isLikingRef = React.useRef(false);
   const handleToggleLike = async () => {
-    if (!post) return;
+    if (!post || isLikingRef.current) return;
+    isLikingRef.current = true;
     const prevLiked = post.isLiked;
     const prevCount = post.likesCount;
 
@@ -151,6 +153,8 @@ export default function PostDetailModal({ postId, isOpen, onClose, onPostDeleted
         isLiked: prevLiked,
         likesCount: prevCount
       }));
+    } finally {
+      isLikingRef.current = false;
     }
   };
 
@@ -162,8 +166,10 @@ export default function PostDetailModal({ postId, isOpen, onClose, onPostDeleted
     }
   };
 
+  const isBookmarkingRef = React.useRef(false);
   const handleToggleBookmark = async () => {
-    if (!post) return;
+    if (!post || isBookmarkingRef.current) return;
+    isBookmarkingRef.current = true;
     const prevBookmarked = post.isBookmarked;
     setPost({ ...post, isBookmarked: !prevBookmarked });
 
@@ -172,6 +178,8 @@ export default function PostDetailModal({ postId, isOpen, onClose, onPostDeleted
       setPost((curr) => ({ ...curr, isBookmarked: res.data.bookmarked }));
     } catch {
       setPost((curr) => ({ ...curr, isBookmarked: prevBookmarked }));
+    } finally {
+      isBookmarkingRef.current = false;
     }
   };
 

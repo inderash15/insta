@@ -131,7 +131,10 @@ export default function PostDetailPage() {
     };
   }, [socket, postId, user]);
 
+  const isLikingRef = React.useRef(false);
   const handleToggleLike = async () => {
+    if (isLikingRef.current) return;
+    isLikingRef.current = true;
     const prevLiked = isLiked;
     const prevCount = likesCount;
     const nextLiked = !prevLiked;
@@ -146,10 +149,15 @@ export default function PostDetailPage() {
     } catch (err) {
       setIsLiked(prevLiked);
       setLikesCount(prevCount);
+    } finally {
+      isLikingRef.current = false;
     }
   };
 
+  const isBookmarkingRef = React.useRef(false);
   const handleToggleBookmark = async () => {
+    if (isBookmarkingRef.current) return;
+    isBookmarkingRef.current = true;
     const prevSaved = isBookmarked;
     setIsBookmarked(!prevSaved);
 
@@ -158,6 +166,8 @@ export default function PostDetailPage() {
       setIsBookmarked(res.data.bookmarked);
     } catch (err) {
       setIsBookmarked(prevSaved);
+    } finally {
+      isBookmarkingRef.current = false;
     }
   };
 

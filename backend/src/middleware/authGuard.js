@@ -3,11 +3,12 @@ import { User } from '../models/User.js';
 
 export const requireAuth = async (req, res, next) => {
   try {
-    let token = req.cookies?.token;
-
-    // Also support Bearer authorization header for API clients or tools
-    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    let token = null;
+    if (req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
+    }
+    if (!token && req.cookies?.token) {
+      token = req.cookies.token;
     }
 
     if (!token) {
@@ -65,9 +66,12 @@ export const requireRole = (...roles) => (req, res, next) => {
 
 export const optionalAuth = async (req, res, next) => {
   try {
-    let token = req.cookies?.token;
-    if (!token && req.headers.authorization?.startsWith('Bearer ')) {
+    let token = null;
+    if (req.headers.authorization?.startsWith('Bearer ')) {
       token = req.headers.authorization.split(' ')[1];
+    }
+    if (!token && req.cookies?.token) {
+      token = req.cookies.token;
     }
 
     if (token) {

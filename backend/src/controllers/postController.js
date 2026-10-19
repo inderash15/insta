@@ -207,53 +207,58 @@ export const toggleLike = async (req, res, next) => {
       targetId: post._id
     });
 
+    let liked = false;
     if (existing) {
       // Unlike
       await Like.findByIdAndDelete(existing._id);
-      const updated = await Post.findByIdAndUpdate(
-        post._id,
-        { $inc: { likesCount: -1 } },
-        { new: true }
-      );
-      const newCount = Math.max(0, updated.likesCount);
+      liked = false;
+    } else {
+      // Like
       try {
-        const io = getIO();
-        if (io) {
-          io.emit('post:unliked', { postId: post._id, likesCount: newCount, userId: req.user._id });
+        await Like.create({
+          user: req.user._id,
+          targetType: 'post',
+          targetId: post._id
+        });
+        liked = true;
+      } catch (err) {
+        if (err.code === 11000) {
+          liked = true;
+        } else {
+          throw err;
         }
-      } catch (e) {}
-      return res.status(200).json({ success: true, liked: false, likesCount: newCount });
+      }
     }
 
-    // Like
-    await Like.create({
-      user: req.user._id,
+    // Authoritative like count from database
+    const likesCount = await Like.countDocuments({
       targetType: 'post',
       targetId: post._id
     });
 
-    const updated = await Post.findByIdAndUpdate(
-      post._id,
-      { $inc: { likesCount: 1 } },
-      { new: true }
-    );
+    await Post.findByIdAndUpdate(post._id, { likesCount });
 
     try {
       const io = getIO();
       if (io) {
-        io.emit('post:liked', { postId: post._id, likesCount: updated.likesCount, userId: req.user._id });
+        io.emit(liked ? 'post:liked' : 'post:unliked', {
+          postId: post._id,
+          likesCount,
+          userId: req.user._id
+        });
       }
     } catch (e) {}
 
-    // Notify author asynchronously
-    createNotification({
-      recipient: post.author,
-      sender: req.user._id,
-      type: 'like_post',
-      post: post._id
-    });
+    if (liked) {
+      createNotification({
+        recipient: post.author,
+        sender: req.user._id,
+        type: 'like_post',
+        post: post._id
+      });
+    }
 
-    return res.status(200).json({ success: true, liked: true, likesCount: updated.likesCount });
+    return res.status(200).json({ success: true, liked, likesCount });
   } catch (err) {
     next(err);
   }
@@ -272,30 +277,41 @@ export const toggleBookmark = async (req, res, next) => {
       post: post._id
     });
 
+    let bookmarked = false;
     if (existing) {
       await Bookmark.findByIdAndDelete(existing._id);
+      bookmarked = false;
+    } else {
       try {
-        const io = getIO();
-        if (io) {
-          io.to(`user:${req.user._id}`).emit('post:unsaved', { postId: post._id, userId: req.user._id });
+        await Bookmark.create({
+          user: req.user._id,
+          post: post._id
+        });
+        bookmarked = true;
+      } catch (err) {
+        if (err.code === 11000) {
+          bookmarked = true;
+        } else {
+          throw err;
         }
-      } catch (e) {}
-      return res.status(200).json({ success: true, bookmarked: false, message: 'Post removed from saved' });
+      }
     }
-
-    await Bookmark.create({
-      user: req.user._id,
-      post: post._id
-    });
 
     try {
       const io = getIO();
       if (io) {
-        io.to(`user:${req.user._id}`).emit('post:saved', { postId: post._id, userId: req.user._id });
+        io.to(`user:${req.user._id}`).emit(bookmarked ? 'post:saved' : 'post:unsaved', {
+          postId: post._id,
+          userId: req.user._id
+        });
       }
     } catch (e) {}
 
-    return res.status(200).json({ success: true, bookmarked: true, message: 'Post saved' });
+    return res.status(200).json({
+      success: true,
+      bookmarked,
+      message: bookmarked ? 'Post saved' : 'Post removed from saved'
+    });
   } catch (err) {
     next(err);
   }
