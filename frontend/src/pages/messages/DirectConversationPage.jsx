@@ -57,7 +57,14 @@ export default function DirectConversationPage() {
     });
   };
 
+  useEffect(() => {
+    if (!conversationId || conversationId === 'inbox') {
+      navigate('/direct', { replace: true });
+    }
+  }, [conversationId, navigate]);
+
   const fetchChat = async () => {
+    if (!conversationId || conversationId === 'inbox') return;
     setLoading(true);
     setError('');
     try {

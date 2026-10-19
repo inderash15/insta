@@ -180,6 +180,14 @@ export default function AppRoutes() {
         <Route path="/auth/signup" element={<GuestRoute><SignupPage /></GuestRoute>} />
         <Route path="/auth/forgot-password" element={<GuestRoute><ForgotPasswordPage /></GuestRoute>} />
         <Route path="/auth/reset-password" element={<GuestRoute><ResetPasswordPage /></GuestRoute>} />
+
+        {/* Canonical & Convenience Auth Aliases */}
+        <Route path="/accounts/login" element={<Navigate to="/auth/login" replace />} />
+        <Route path="/accounts/emailsignup" element={<Navigate to="/auth/signup" replace />} />
+        <Route path="/accounts/signup" element={<Navigate to="/auth/signup" replace />} />
+        <Route path="/accounts/password/reset" element={<Navigate to="/auth/forgot-password" replace />} />
+        <Route path="/login" element={<Navigate to="/auth/login" replace />} />
+        <Route path="/signup" element={<Navigate to="/auth/signup" replace />} />
       </Route>
 
       {/* ======================================================== */}
@@ -284,17 +292,27 @@ export default function AppRoutes() {
 
         {/* Section H: Direct Messaging */}
         <Route path="/direct" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
-        <Route path="/direct/:conversationId" element={<ProtectedRoute><DirectConversationPage /></ProtectedRoute>} />
+        <Route path="/direct/inbox" element={<ProtectedRoute><MessagesPage /></ProtectedRoute>} />
         <Route path="/direct/new" element={<ProtectedRoute><DirectNewPage /></ProtectedRoute>} />
         <Route path="/direct/requests" element={<ProtectedRoute><DirectRequestsPage /></ProtectedRoute>} />
         <Route path="/direct/archived" element={<ProtectedRoute><DirectArchivedPage /></ProtectedRoute>} />
         <Route path="/direct/starred" element={<ProtectedRoute><DirectStarredPage /></ProtectedRoute>} />
+        <Route path="/direct/settings" element={<ProtectedRoute><DirectSettingsPage /></ProtectedRoute>} />
+        <Route path="/direct/t/:conversationId" element={<ProtectedRoute><DirectConversationPage /></ProtectedRoute>} />
         <Route path="/direct/:conversationId/details" element={<ProtectedRoute><DirectDetailsPage /></ProtectedRoute>} />
         <Route path="/direct/:conversationId/media" element={<ProtectedRoute><DirectMediaPage /></ProtectedRoute>} />
         <Route path="/direct/:conversationId/members" element={<ProtectedRoute><DirectMembersPage /></ProtectedRoute>} />
         <Route path="/direct/:conversationId/search" element={<ProtectedRoute><DirectSearchPage /></ProtectedRoute>} />
         <Route path="/direct/:conversationId/requests" element={<ProtectedRoute><DirectGroupRequestsPage /></ProtectedRoute>} />
-        <Route path="/direct/settings" element={<ProtectedRoute><DirectSettingsPage /></ProtectedRoute>} />
+        <Route path="/direct/:conversationId" element={<ProtectedRoute><DirectConversationPage /></ProtectedRoute>} />
+        <Route path="/messages" element={<Navigate to="/direct" replace />} />
+        <Route path="/messages/inbox" element={<Navigate to="/direct" replace />} />
+
+        {/* Canonical Post & Profile Aliases */}
+        <Route path="/p/:postId" element={<ProtectedRoute><PostDetailPage /></ProtectedRoute>} />
+        <Route path="/profile/:username" element={<ProfilePage />} />
+        <Route path="/accounts/edit" element={<ProtectedRoute><EditProfilePage /></ProtectedRoute>} />
+        <Route path="/feed" element={<Navigate to="/home" replace />} />
 
         {/* Section I: Notifications & Activity */}
         <Route path="/notifications" element={<ProtectedRoute><NotificationsPage /></ProtectedRoute>} />

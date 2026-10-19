@@ -9,6 +9,7 @@ import {
   CheckCheck, 
   Loader2, 
   Smile, 
+  Heart,
   Phone, 
   Video 
 } from 'lucide-react';
